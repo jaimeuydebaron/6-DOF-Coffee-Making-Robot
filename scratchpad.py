@@ -21,8 +21,8 @@ homeL = RDK.Item("Home_L", ITEM_TYPE_TARGET) # Link homeL to Home_L
 UR5.MoveL(homeR, True) # This is a linear move, moves the robot in a straight line in space
 
 
-pose = transl(-100, -100, 100) * rotz(60 * pi/180)
+pose = transl(-412, -482, 344) * rotz(60 * pi/180)
 frame = RDK.AddFrame("TestFrame")
 frame.setPose(pose) # This sets a marker in code to see where it is
 
-UR5.MoveL(pose, True) # Then pass this thru a MoveJ
+UR5.MoveJ(pose, True) # Then pass this thru a MoveJ
