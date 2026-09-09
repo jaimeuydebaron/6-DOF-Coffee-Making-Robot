@@ -28,7 +28,7 @@ task_b_approach_pose = compute_placement_pose(
     axis_mapping=[[0,1,0],
                   [1,0,0],
                   [0,0,-1]],  # needs re-deriving by inspection for this motion
-    tool_point_key=51,         # Mazzer tool's dose bar edge
+    tool_point_key=51,         # Mazzer tool's point
     tool_z_offset_deg=130,       # unconfirmed for Mazzer tool — flag until verified
 )
 

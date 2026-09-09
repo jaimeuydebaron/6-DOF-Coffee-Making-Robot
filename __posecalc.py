@@ -12,36 +12,27 @@ def get_point(key):
       return entry[3], entry[4], entry[5]
 
 
-def compute_fixture_pose(fixture_name):
-      """
-      Computes ᵁᴿT_fixture using the primer's Part A method:
-      translation from the world-frame origin, rotation recovered via
-      atan2(cross, dot) between the local and world displacement vectors.
-      """
-      fixture_points = [v for v in POINTS.values() if v[2] == fixture_name]
+def compute_fixture_pose(fixture_name, world_second_key, local_second_key):
+    fixture_points = [v for v in POINTS.values() if v[2] == fixture_name]
 
-      world_origin = next(v for v in fixture_points if v[0] == "world" and v[1])
-      world_second = next(v for v in fixture_points if v[0] == "world" and not v[1])
-      local_origin = next(v for v in fixture_points if v[0] == "local" and v[1])
-      local_second = next(v for v in fixture_points if v[0] == "local" and not v[1])
+    world_origin = next(v for v in fixture_points if v[0] == "world" and v[1])
+    local_origin = next(v for v in fixture_points if v[0] == "local" and v[1])
 
-      tx, ty, tz = world_origin[3], world_origin[4], world_origin[5]
+    world_second = POINTS[world_second_key]
+    local_second = POINTS[local_second_key]
 
-      world_dx = world_second[3] - world_origin[3]
-      world_dy = world_second[4] - world_origin[4]
-      local_dx = local_second[3] - local_origin[3]
-      local_dy = local_second[4] - local_origin[4]
+    tx, ty, tz = world_origin[3], world_origin[4], world_origin[5]
 
-      cross = local_dx * world_dy - local_dy * world_dx
-      dot   = local_dx * world_dx + local_dy * world_dy
-      theta = math.atan2(cross, dot)
+    world_dx = world_second[3] - world_origin[3]
+    world_dy = world_second[4] - world_origin[4]
+    local_dx = local_second[3] - local_origin[3]
+    local_dy = local_second[4] - local_origin[4]
 
-      local_len = math.hypot(local_dx, local_dy)
-      world_len = math.hypot(world_dx, world_dy)
-      print(f"[{fixture_name}] theta = {math.degrees(theta):.2f} deg | "
-            f"local_len = {local_len:.2f} | world_len = {world_len:.2f}")
+    cross = local_dx * world_dy - local_dy * world_dx
+    dot   = local_dx * world_dx + local_dy * world_dy
+    theta = math.atan2(cross, dot)
 
-      return transl(tx, ty, tz) * rotz(theta)
+    return transl(tx, ty, tz) * rotz(theta)
 
 
 def build_pose(rotation_columns, xyz):
