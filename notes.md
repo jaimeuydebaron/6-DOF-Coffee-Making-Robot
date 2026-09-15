@@ -77,3 +77,5 @@
 **Note:** robot must start and end in the (left or right) Home position.
 
 **Marking:** 1 mark per task correctly demonstrated. Collisions: -1 each, max -3. Out-of-bounding-box: -1 flat. Cannot score below 0 overall.
+
+**Task Split:**

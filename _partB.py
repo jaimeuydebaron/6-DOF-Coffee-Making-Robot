@@ -3,7 +3,7 @@ from robodk.robolink import *   # Bridge between Python and RoboDK
 from robodk.robomath import *   # Pose-building helpers — transl(), rotx(), roty(), rotz(), pi, eye(), etc.
 from time import sleep          # For pauses between actions
 import tools                    # Local tools.py — the Tools class (attach/detach, actuation methods)
-from __points import POINTS       # Local points.py — the raw survey data dictionary
+from __points import POINTS     # Local points.py — the raw survey data dictionary
 import math                     # Needed for atan2
 
 # Definitely need an intermediate point for this one before we get there cause we actually collide with the coffe machine before we get to it

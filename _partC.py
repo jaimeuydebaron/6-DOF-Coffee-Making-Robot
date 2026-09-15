@@ -3,9 +3,10 @@ from robodk.robolink import *   # Bridge between Python and RoboDK
 from robodk.robomath import *   # Pose-building helpers — transl(), rotx(), roty(), rotz(), pi, eye(), etc.
 from time import sleep          # For pauses between actions
 import tools                    # Local tools.py — the Tools class (attach/detach, actuation methods)
-from __points import POINTS       # Local points.py — the raw survey data dictionary
+from __points import POINTS     # Local points.py — the raw survey data dictionary
 import math                     # Needed for sqrt
 
+# Need to change button pressing pose and fine tune the position of the button as it is slightly off, and also move it sort of like backward and then forward. 
 
 def get_point(key):
     entry = POINTS[key]
@@ -84,9 +85,9 @@ def compute_task_c_pose():
     T_fixture_placement = build_pose(axis_mapping, point_local)
     T_world_target = mazzer_pose * T_fixture_placement
 
-    test_frame = RDK.AddFrame("TaskCCheck")
-    test_frame.setParent(RDK.Item("UR5_Base", ITEM_TYPE_FRAME))
-    test_frame.setPose(T_world_target)   # check before the tool offset is applied
+    # test_frame = RDK.AddFrame("TaskCCheck")
+    # test_frame.setParent(RDK.Item("UR5_Base", ITEM_TYPE_FRAME))
+    # test_frame.setPose(T_world_target)   # check before the tool offset is applied
 
     # --- Tool offset: Mazzer tool's cylinder tip (Key 51) ---
     tool_point_local = get_point(51)
@@ -123,7 +124,7 @@ def run_task_c(UR5, tls, RDK):
     sleep(15)                        # grind for 15 seconds, per the assignment brief
     UR5.MoveJ(off_pose, True)        # press the off button
     tls.mazzer_tool_detach_r_ati()   # return the tool
-    UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)  # go home
+    # UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)  # go home
 
 
 if __name__ == "__main__":

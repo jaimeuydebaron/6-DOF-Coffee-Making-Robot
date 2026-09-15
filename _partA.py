@@ -3,11 +3,11 @@ from robodk.robolink import *   # Bridge between Python and RoboDK
 from robodk.robomath import *   # Pose-building helpers — transl(), rotx(), roty(), rotz(), pi, eye(), etc.
 from time import sleep          # For pauses between actions
 import tools                    # Local tools.py — the Tools class (attach/detach, actuation methods)
-from __points import POINTS       # Local points.py — the raw survey data dictionary
+from __points import POINTS     # Local points.py — the raw survey data dictionary
 import math                     # Needed for atan2, hypot, etc.
 
 
-# TA suggested intermediate points and using a cartesian jog to determine where we should place things.
+# TA suggested intermediate points and using a cartesian jog to determine where we should place things. Also it collides
 
 def get_point(key):
     entry = POINTS[key]          # look up the row for this key number
