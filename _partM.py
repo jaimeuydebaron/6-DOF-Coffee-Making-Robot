@@ -1,10 +1,10 @@
 # _partM.py
-from robodk.robolink import *   # Bridge between Python and RoboDK
-from robodk.robomath import *   # Pose-building helpers — transl(), rotx(), roty(), rotz(), pi, eye(), etc.
-from time import sleep          # For pauses between actions
-import tools                    # Local tools.py — the Tools class (attach/detach, actuation methods)
-from __points import POINTS     # Local points.py — the raw survey data dictionary
-import math                     # Needed for sqrt
+from robodk.robolink import *
+from robodk.robomath import *
+from time import sleep
+import tools
+from __points import POINTS
+import math
 
 
 def get_point(key):
@@ -36,19 +36,30 @@ def cross_product(a, b):
     )
 
 
+def apply_rotation(R, point):
+    x = R[0,0]*point[0] + R[0,1]*point[1] + R[0,2]*point[2]
+    y = R[1,0]*point[0] + R[1,1]*point[1] + R[1,2]*point[2]
+    z = R[2,0]*point[0] + R[2,1]*point[1] + R[2,2]*point[2]
+    return (x, y, z)
+
+
+def compute_waypoints(target_pose, offsets):
+    # builds a dict of named waypoints, each derived from target_pose by
+    # a translation and rotation offset in the tool's own local frame
+    # offsets: list of (name, (x_mm, y_mm, z_mm), (rx_deg, ry_deg, rz_deg))
+    waypoints = {}
+
+    for name, translation_mm, angle_deg in offsets:
+        angle_offset = rotx(angle_deg[0]*pi/180) \
+                     * roty(angle_deg[1]*pi/180) \
+                     * rotz(angle_deg[2]*pi/180)
+        waypoints[name] = target_pose * transl(*translation_mm) * angle_offset
+
+    return waypoints
+
+
 def compute_cup_dispenser_pose():
-    """
-    Computes the cup dispenser's own frame pose using TWO measured refrence points.
-
-    Key 1 is the cup dispenser frame in the world frame
-    Key 2 is a point on the dispenser in the world frame
-    Key 16 is the cup dispenser frame in the locak frame
-    Key 17 is the point in the dispenser local frame similar to Key 2
-    Key 19 is the pull position in the local frame
-    Key 28 is the open position in the local frame 
-    
-    """
-
+    # gets the cup dispenser origin and reference point in world and local coordinates
     origin_w = get_point(1)
     origin_l = get_point(16)
     ref_w = get_point(2)
@@ -56,68 +67,54 @@ def compute_cup_dispenser_pose():
 
     translation = origin_w
 
+    # finds the world frame displacement between origin and reference point
     world_frame_displacement = tuple(ref_w[i] - origin_w[i] for i in range(3))
 
+    # known tilt of the fixture, found by inspection, matches the primer's cup stand example
     frame_tilt = roty(-90 * pi / 180)
 
-    local_point = tuple(ref_l[i] - origin_l[i] for i in range(3)) 
-
-    def apply_rotation(R, point):
-        x = R[0,0]*point[0] + R[0,1]*point[1] + R[0,2]*point[2]
-        y = R[1,0]*point[0] + R[1,1]*point[1] + R[1,2]*point[2]
-        z = R[2,0]*point[0] + R[2,1]*point[1] + R[2,2]*point[2]
-        return (x, y, z)
-
+    # strips the known tilt out of the local reference point to isolate the unknown spin
+    local_point = tuple(ref_l[i] - origin_l[i] for i in range(3))
     upright_point = apply_rotation(frame_tilt, local_point)
 
+    # solves for the remaining spin by comparing the flattened local point against the world displacement
     cross = upright_point[0] * world_frame_displacement[1] - upright_point[1] * world_frame_displacement[0]
     dot = upright_point[0] * world_frame_displacement[0] + upright_point[1] * world_frame_displacement[1]
-
     psi = math.atan2(cross, dot)
 
+    # combines the solved spin with the known tilt, known tilt applied first
     UR_R_CSprime = rotz(psi)
     UR_R_CS = UR_R_CSprime * frame_tilt
 
     cup_dispenser_pose = transl(*translation) * UR_R_CS
-
     return cup_dispenser_pose
 
-def compute_task_m_shut_pose():
 
+def compute_task_m_shut_pose(fixture_fine_tune_mm):
     cup_dispenser_pose = compute_cup_dispenser_pose()
+    cup_dispenser_pose = cup_dispenser_pose * transl(*fixture_fine_tune_mm)
 
-    # --- Fine-tune the fixture pose itself (EDIT HERE IN THE LAB) ---
-    FIXTURE_FINE_TUNE_MM = (0, 0, 0)
-    mazzer_pose = cup_dispenser_pose * transl(*FIXTURE_FINE_TUNE_MM)
-
-    # --- Placement: Mazzer on button (Key 26), axis mapping by inspection ---
-    point_local = get_point(19)  # "Mazzer on button centre (raised)"
-    axis_mapping = [[0,1,0], [0,0,-1], [-1,0,0]]  # tool axes mapped onto Mazzer axes, by inspection — VERIFY visually
+    # sets the placement point as the tab in its shut position and the tool's orientation there
+    point_local = get_point(19)
+    axis_mapping = [[1,0,0], [0,1,0], [0,0,1]]
     T_fixture_placement = build_pose(axis_mapping, point_local)
-    T_world_target = mazzer_pose * T_fixture_placement
+    T_world_target = cup_dispenser_pose * T_fixture_placement
 
-    # test_frame = RDK.AddFrame("TaskCCheck")
-    # test_frame.setParent(RDK.Item("UR5_Base", ITEM_TYPE_FRAME))
-    # test_frame.setPose(T_world_target)   # check before the tool offset is applied
-
-    # --- Tool offset: Mazzer tool's cylinder tip (Key 51) ---
+    # sets the mazzer tool's contact point and mounting angle offset
     tool_point_local = get_point(51)
-    T_tool_offset = rotz(0 * pi/180) * transl(*tool_point_local)  # mounting-angle offset — unconfirmed, flag for checking
-    task_m_shut_pose_part1 = T_world_target * T_tool_offset.inv()
+    T_tool_offset = rotz(0 * pi/180) * transl(*tool_point_local)
+    task_m_shut_pose = T_world_target * T_tool_offset.inv()
 
-    return task_m_shut_pose_part1
+    return task_m_shut_pose
 
 
-def compute_task_m_open_pose():
-    """Same as above, but for the OFF button (Key 25)."""
+def compute_task_m_open_pose(fixture_fine_tune_mm):
     cup_dispenser_pose = compute_cup_dispenser_pose()
+    cup_dispenser_pose = cup_dispenser_pose * transl(*fixture_fine_tune_mm)
 
-
-    FIXTURE_FINE_TUNE_MM = (0, 0, 0)
-    cup_dispenser_pose = cup_dispenser_pose * transl(*FIXTURE_FINE_TUNE_MM)
-
-    point_local = get_point(18) 
-    axis_mapping = [[0,1,0], [0,0,-1], [-1,0,0]]
+    # sets the placement point as the tab in its open position and the tool's orientation there
+    point_local = get_point(18)
+    axis_mapping = [[1,0,0], [0,1,0], [0,0,1]]
     T_fixture_placement = build_pose(axis_mapping, point_local)
     T_world_target = cup_dispenser_pose * T_fixture_placement
 
@@ -126,30 +123,58 @@ def compute_task_m_open_pose():
     return T_world_target * T_tool_offset.inv()
 
 
-def run_task_m(UR5, tls, RDK):
-    """Robot actions only — this is the part likely to change in the lab."""
-    shut_pose = compute_task_m_shut_pose()
-    open_pose = compute_task_m_open_pose()
+# joint config that clears the cup dispenser body on approach and retreat
+joints_intermediate_clear = Mat([
+    [-136.349366],
+    [-88.043601],
+    [-120.503981],
+    [-151.742096],
+    [-46.514798],
+    [-269.491010],
+])
 
-    tls.mazzer_tool_attach_r_ati()   # pick up the Mazzer tool
-    UR5.MoveJ(shut_pose, True)         # press the on button
-    sleep(3)                        # grind for 15 seconds, per the assignment brief
-    UR5.MoveJ(open_pose, True)        # press the off button
-    tls.mazzer_tool_detach_r_ati()   # return the tool
-    # UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)  # go home
+
+def run_task_m(UR5, tls, RDK):
+    # edit these in the lab
+    shut_fixture_fine_tune_mm = (0, 0, -4)
+    open_fixture_fine_tune_mm = (0, 0, 0)
+
+    shut_pose = compute_task_m_shut_pose(shut_fixture_fine_tune_mm)
+    open_pose = compute_task_m_open_pose(open_fixture_fine_tune_mm)
+
+    # waypoints built separately from the targets
+    shut_waypoints = compute_waypoints(shut_pose, offsets=[])
+    open_waypoints = compute_waypoints(open_pose, offsets=[])
+
+    # picks up the mazzer tool from the tool stand
+    tls.mazzer_tool_attach_r_ati()
+
+    # # moves in to the tab and pulls it open then shut once to drop a cup
+    # UR5.MoveJ(joints_intermediate_clear, True)
+    # UR5.MoveJ(shut_pose, True)
+    # sleep(1)
+    # UR5.MoveJ(open_pose, True)
+    # sleep(1)
+    UR5.MoveJ(shut_pose, True)
+
+    # retreats clear of the fixture before detaching the tool and going home
+    UR5.MoveJ(joints_intermediate_clear, True)
+    tls.mazzer_tool_detach_r_ati()
+    UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":
     RDK = Robolink()
+
+    # --- simulation settings (use when testing in robodk only) ---
     RDK.setRunMode(RUNMODE_SIMULATE)
+
+    # --- real robot settings (uncomment when running on the physical robot) ---
+    # RDK.setRunMode(RUNMODE_RUN_ROBOT)
+    # connect to the robot before running: connect -> connect robot, then press connect and get position
+
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
-    RDK.Item("Reset_Simulation_R", ITEM_TYPE_PROGRAM).RunCode()
+    # RDK.Item("Reset_Simulation_R", ITEM_TYPE_PROGRAM).RunCode()
 
-    # --- Visual check before running the real task ---
-    # mazzer_pose = compute_mazzer_pose()
-    # test_frame = RDK.AddFrame("MazzerCheck")
-    # test_frame.setParent(RDK.Item("UR5_Base", ITEM_TYPE_FRAME))
-    # test_frame.setPose(mazzer_pose)
-
-    run_task_m(UR5, tls, RDK)  # uncomment once MazzerCheck is confirmed correct
+    run_task_m(UR5, tls, RDK)

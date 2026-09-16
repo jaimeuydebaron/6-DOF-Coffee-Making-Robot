@@ -73,8 +73,8 @@ def run_task_a(UR5, tls, RDK):
 
     tls.rancilio_tool_attach_r_ati()  # pick up the Rancilio tool from the tool stand
     UR5.MoveJ(pose, True)             # move the robot's TCP to the computed pose (blocking — wait until done)
-    tls.student_tool_detach()         # release the tool here, leaving it on the scale
-    UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)
+    # tls.student_tool_detach()         # release the tool here, leaving it on the scale
+    # UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)
 
     # # Detach tool in simulation
     # # Hide the Rancilio tool currently attached to the robot's flange
