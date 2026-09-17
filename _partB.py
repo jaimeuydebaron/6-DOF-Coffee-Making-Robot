@@ -111,20 +111,20 @@ def run_task_b(UR5, tls, RDK):
     approach_pose, slide_pose, press_pose = compute_task_b_poses()
 
     # picks up the mazzer tool from the tool stand
-    tls.mazzer_tool_attach_r_ati()
+    # tls.mazzer_tool_attach_r_ati()
 
-    # moves through the two staging poses to avoid colliding with the coffee machine
-    UR5.MoveJ(staging_pose_1, True)
-    UR5.MoveL(clean_pose(staging_pose_2), True)
+    # # moves through the two staging poses to avoid colliding with the coffee machine
+    # UR5.MoveJ(staging_pose_1, True)
+    # UR5.MoveL(clean_pose(staging_pose_2), True)
 
-    # moves to the lock lever, slides, then presses to unlock the scale
+    # # moves to the lock lever, slides, then presses to unlock the scale
     UR5.MoveL(approach_pose, True)
     UR5.MoveL(slide_pose, True)
     UR5.MoveL(press_pose, True)
 
-    # returns the mazzer tool and sends the robot home
-    tls.mazzer_tool_detach_r_ati()
-    UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)
+    # # returns the mazzer tool and sends the robot home
+    # tls.mazzer_tool_detach_r_ati()
+    # UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":
@@ -139,6 +139,6 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
-    RDK.Item("Reset_Simulation_R", ITEM_TYPE_PROGRAM).RunCode()
+    # RDK.Item("Reset_Simulation_R", ITEM_TYPE_PROGRAM).RunCode()
 
     run_task_b(UR5, tls, RDK)
