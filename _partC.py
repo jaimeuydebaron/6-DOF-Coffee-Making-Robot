@@ -174,16 +174,16 @@ def run_task_c(UR5, tls, RDK):
 
     UR5.MoveJ(staging_pose, True)
     UR5.MoveJ(on_approach_joint_angles, True)
-    UR5.MoveJ(on_pose, True)
-    UR5.MoveL(on_approach_joint_angles, True)
+    # UR5.MoveJ(on_pose, True)
+    # UR5.MoveL(on_approach_joint_angles, True)
 
     sleep(3)
     # # sleep(15)
 
-    UR5.MoveL(off_approach_joint_angles)
-    UR5.MoveL(off_pose, True)
+    # UR5.MoveL(off_approach_joint_angles)
+    # UR5.MoveL(off_pose, True)
     # UR5.MoveL(off_waypoints["approach"], True) # this exists to tune the joint angle to avoid collision, you need to first tune off pose, then apply this MoveL, then change the config and take that joint angle and paste, the controller might try another config if you dont force it, thats why you dont use this
-    UR5.MoveL(off_approach_joint_angles)         
+    # UR5.MoveL(off_approach_joint_angles)         
 
     
     UR5.MoveJ(staging_pose, True)

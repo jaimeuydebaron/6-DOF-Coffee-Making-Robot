@@ -28,18 +28,36 @@ def clean_pose(pose):
     return good_ht
 
 
-def compute_task_b_poses():
-    # shifts the mazzer scale's whole pose in its own local x, y, z directions to correct calibration drift
-    FIXTURE_FINE_TUNE_MM = (0, 0, 0)
+def compute_waypoints(target_pose, offsets):
+    # builds a dict of named waypoints, each derived from target_pose by
+    # a translation and rotation offset in the tool's own local frame
+    # offsets: list of (name, (x_mm, y_mm, z_mm), (rx_deg, ry_deg, rz_deg))
+    waypoints = {}
 
+    for name, translation_mm, angle_deg in offsets:
+        angle_offset = rotx(angle_deg[0]*pi/180) \
+                     * roty(angle_deg[1]*pi/180) \
+                     * rotz(angle_deg[2]*pi/180)
+        waypoints[name] = target_pose * transl(*translation_mm) * angle_offset
+
+    return waypoints
+
+
+def rotate_about_tip(pose, tip_offset_mm, angle_adjust):
+    # rotates a pose about the tool's tip instead of about the tcp, so the
+    # tip's position stays fixed while only its facing direction changes
+    return pose \
+        * transl(*tip_offset_mm) \
+        * angle_adjust \
+        * transl(*tuple(-c for c in tip_offset_mm))
+
+
+def compute_task_b_poses(fixture_fine_tune_mm, approach_angle_adjust_deg):
     # slides the tool along the mazzer scale's own x, y, z directions before pressing the lever
     SLIDE_MM = (-20, 0, 0)
 
     # presses the tool further along the mazzer scale's own x, y, z directions to flip the lever
     PRESS_MM = (0, 0, -15)
-
-    # rotates the mazzer tool's contact point about its own z axis
-    TOOL_MOUNT_ANGLE_DEG = 130
 
     # gets the mazzer scale origin and reference point in world and local coordinates
     origin_w = get_point(6)
@@ -62,83 +80,118 @@ def compute_task_b_poses():
     mazzer_scale_pose = transl(*origin_w) * rotz(theta)
 
     # applies the fixture calibration correction
-    mazzer_scale_pose = mazzer_scale_pose * transl(*FIXTURE_FINE_TUNE_MM)
+    mazzer_scale_pose = mazzer_scale_pose * transl(*fixture_fine_tune_mm)
 
     # sets the placement point as the left lock lever and the tool's orientation there
-    point_local = get_point(30)
+    point_local = get_point(31)
     axis_mapping = [[0,1,0], [1,0,0], [0,0,-1]]
 
-    # sets the mazzer tool's contact point and mounting angle offset
+    # sets the mazzer tool's contact point
     tool_point_local = get_point(51)
-    T_tool_offset = rotz(TOOL_MOUNT_ANGLE_DEG * pi/180) * transl(*tool_point_local)
+    T_tool_offset = transl(*tool_point_local)
+
+    # angle correction, rotated about the tool tip so its position doesn't move
+    angle_adjust = rotx(approach_angle_adjust_deg[0]*pi/180) \
+                 * roty(approach_angle_adjust_deg[1]*pi/180) \
+                 * rotz(approach_angle_adjust_deg[2]*pi/180)
 
     # builds the approach pose at the lock lever
     T_fixture_placement = build_pose(axis_mapping, point_local)
     T_world_target = mazzer_scale_pose * T_fixture_placement
-    task_b_approach_pose = T_world_target * T_tool_offset.inv()
+    task_b_lock_pose = rotate_about_tip(T_world_target * T_tool_offset.inv(), tool_point_local, angle_adjust)
 
     # builds the slide pose by offsetting the fixture pose along its own local frame
     mazzer_scale_pose_slid = mazzer_scale_pose * transl(*SLIDE_MM)
     T_world_target_slid = mazzer_scale_pose_slid * T_fixture_placement
-    task_b_slide_pose = T_world_target_slid * T_tool_offset.inv()
+    task_b_slide_pose = rotate_about_tip(T_world_target_slid * T_tool_offset.inv(), tool_point_local, angle_adjust)
 
     # builds the press pose by offsetting further along the fixture's own frame
     mazzer_scale_pose_pressed = mazzer_scale_pose_slid * transl(*PRESS_MM)
     T_world_target_pressed = mazzer_scale_pose_pressed * T_fixture_placement
-    task_b_press_pose = T_world_target_pressed * T_tool_offset.inv()
+    task_b_press_pose = rotate_about_tip(T_world_target_pressed * T_tool_offset.inv(), tool_point_local, angle_adjust)
 
-    return task_b_approach_pose, task_b_slide_pose, task_b_press_pose
+    return task_b_lock_pose, task_b_slide_pose, task_b_press_pose
 
 
-# intermediate pose to avoid hitting mazzer
-staging_pose_1 = Mat([
-    [-0.939853,  0.341580,  0.000012, 415.802930],
-    [ 0.341580,  0.939853, -0.000002, -189.997992],
-    [-0.000012,  0.000002, -1.000000, 169.519942],
-    [ 0.000000,  0.000000,  0.000000,   1.000000],
+# lock position approach pose before unlocking to avoid hitting rancilio tool
+lock_approach_joints = Mat([
+    [100.175126],
+    [-73.098008],
+    [118.468843],
+    [-104.907218],
+    [-35.456113],
+    [14.167126],
 ])
 
-# linear move from previous intermediate point to just above the on pose
-staging_pose_2 = Mat([
-    [-0.939852,  0.341581, -0.000030, 475.802944],
-    [ 0.341581,  0.939852,  0.000005, -289.997977],
-    [ 0.000030, -0.000005, -1.000000, 169.519944],
-    [ 0.000000,  0.000000,  0.000000,   1.000000],
+lock_unlocked_joints = Mat([
+    [99.331062],
+    [-73.629932],
+    [122.148331],
+    [-107.046556],
+    [-35.890453],
+    [12.926037],
+])
+
+staging_joints_general = Mat([
+    [118.506308],
+    [-97.117079],
+    [116.960032],
+    [-109.759306],
+    [-89.525329],
+    [-206.644986],
 ])
 
 
 def run_task_b(UR5, tls, RDK):
-    approach_pose, slide_pose, press_pose = compute_task_b_poses()
+    # edit these in the lab
+
+    # shifts the mazzer scale's whole pose in its own local x, y, z directions to correct calibration drift
+    fixture_fine_tune_mm = (0, 0, 0)
+
+    # rotates the tool's approach about the tip, since the rancilio tool
+    # will already be sitting on the mazzer scale when this task runs
+    approach_angle_adjust_deg = (0, 60, -130)
+
+    lock_pose, slide_pose, press_pose = compute_task_b_poses(fixture_fine_tune_mm, approach_angle_adjust_deg)
+
+    # compute a waypoint
+    lock_waypoint = compute_waypoints(lock_pose, offsets=[("approach", (0, 0, -50), (0, 0, 0))])
+    unlock_waypoint = compute_waypoints(press_pose, offsets=[("approach", (0, 0, -50), (0, 0, 0))])
 
     # picks up the mazzer tool from the tool stand
-    # tls.mazzer_tool_attach_r_ati()
+    tls.mazzer_tool_attach_l_ati()
 
-    # # moves through the two staging poses to avoid colliding with the coffee machine
-    # UR5.MoveJ(staging_pose_1, True)
-    # UR5.MoveL(clean_pose(staging_pose_2), True)
+    UR5.MoveJ(staging_joints_general, True)
 
     # # moves to the lock lever, slides, then presses to unlock the scale
-    UR5.MoveL(approach_pose, True)
+    # UR5.MoveJ(lock_waypoint["approach"], True)
+    UR5.MoveJ(lock_approach_joints, True)
+    UR5.MoveL(lock_pose, True)
     UR5.MoveL(slide_pose, True)
     UR5.MoveL(press_pose, True)
+    # UR5.MoveL(unlock_waypoint["approach"], True)
+    UR5.MoveL(lock_unlocked_joints, True)
 
-    # # returns the mazzer tool and sends the robot home
-    # tls.mazzer_tool_detach_r_ati()
-    # UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)
+    UR5.MoveJ(staging_joints_general, True)
+
+
+    # returns the mazzer tool and sends the robot home
+    tls.mazzer_tool_detach_l_ati()
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":
     RDK = Robolink()
 
-    # --- SIMULATION SETTINGS (use when testing in RoboDK only) ---
+    # --- simulation settings (use when testing in robodk only) ---
     RDK.setRunMode(RUNMODE_SIMULATE)
 
-    # --- REAL ROBOT SETTINGS (uncomment when running on the physical robot) ---
+    # --- real robot settings (uncomment when running on the physical robot) ---
     # RDK.setRunMode(RUNMODE_RUN_ROBOT)
-    # connect to the robot before running: Connect -> Connect robot, then press Connect and Get Position
+    # connect to the robot before running: connect -> connect robot, then press connect and get position
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
-    # RDK.Item("Reset_Simulation_R", ITEM_TYPE_PROGRAM).RunCode()
+    RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
     run_task_b(UR5, tls, RDK)
