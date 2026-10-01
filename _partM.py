@@ -84,9 +84,29 @@ joints_intermediate_clear = [-136.349366, -88.043601, -120.503981, -151.742096, 
 
 
 def run_task_m(UR5, tls, RDK):
-    # Edit these in the lab
+    # ==================== FINE TUNING (edit these in the lab) ====================
+    # The tool moves between two tab positions, shut and open, and each has its own fine tune, so changing one
+    # does not affect the other. There is no angle setting in this part, the tool's orientation is fixed.
+    # The motion is: shut, then open, then shut again, which releases a cup.
+
+    # shut_fixture_fine_tune_mm = (x, y, z) in mm
+    # Moves WHERE the tool sits when the tab is shut, by shifting the assumed position of the cup dispenser
+    # along the cup dispenser's own axes. Used for the first and the last move, so it sets where the tab ends up.
+    #   x: shifts along the cup dispenser's local x
+    #   y: shifts along the cup dispenser's local y
+    #   z: shifts along the cup dispenser's local z, use this if the tool is pressing into or missing the tab
     shut_fixture_fine_tune_mm = (0, 0, -4)
+
+    # open_fixture_fine_tune_mm = (x, y, z) in mm
+    # Same as shut_fixture_fine_tune_mm, but for where the tool sits when the tab is open. The distance between
+    # the shut and open positions is what flicks the tab, so nudging this changes how far the tab is pushed.
     open_fixture_fine_tune_mm = (0, 0, 0)
+
+    # The joint pose joints_intermediate_clear is a jogged pose used to enter and leave, it is NOT affected by
+    # the settings above. If you move either position a lot, re-jog it so the moves stay clear of the dispenser.
+    # The one second waits between the moves are in the motion below, edit those to change how long the tab
+    # stays open or shut.
+    # =============================================================================
 
     shut_pose = compute_task_m_shut_pose(shut_fixture_fine_tune_mm)
     open_pose = compute_task_m_open_pose(open_fixture_fine_tune_mm)
@@ -107,13 +127,6 @@ def run_task_m(UR5, tls, RDK):
     tls.mazzer_tool_detach_r_ati()
 
 
-def test_task_m(UR5, tls, RDK):
-    run_task_m(UR5, tls, RDK)
-
-    # Sends the robot home
-    UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)
-
-
 if __name__ == "__main__":
     RDK = Robolink()
 
@@ -128,4 +141,7 @@ if __name__ == "__main__":
     tls = tools.Tools(RDK)
     RDK.Item("Reset_Simulation_R", ITEM_TYPE_PROGRAM).RunCode()
 
-    test_task_m(UR5, tls, RDK)
+    run_task_m(UR5, tls, RDK)
+
+    # Sends the robot home
+    UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)

@@ -3,16 +3,9 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import get_point, build_pose, rotate_about_tip, solve_frame_rotation
+from _common import get_point, build_pose, rotate_about_tip, solve_frame_rotation, compute_waypoints
 
-
-def compute_task_b_poses(fixture_fine_tune_mm, approach_angle_adjust_deg):
-    # Slides the tool along the mazzer scale's own x, y, z directions before pressing the lever
-    SLIDE_MM = (-20, 0, 0)
-
-    # Presses the tool further along the mazzer scale's own x, y, z directions to flip the lever
-    PRESS_MM = (0, 0, -15)
-
+def compute_task_b_poses(fixture_fine_tune_mm, approach_angle_adjust_deg, slide_mm, press_mm):
     # Gets the mazzer scale's origin and a reference point, in both world and local coordinates
     origin_w = get_point(6)
     origin_l = get_point(27)
@@ -47,12 +40,12 @@ def compute_task_b_poses(fixture_fine_tune_mm, approach_angle_adjust_deg):
     task_b_lock_pose = rotate_about_tip(T_world_target * T_tool_offset.inv(), tool_point_local, angle_adjust)
 
     # Builds the slide pose by offsetting the fixture pose along its own local frame
-    mazzer_scale_pose_slid = mazzer_scale_pose * transl(*SLIDE_MM)
+    mazzer_scale_pose_slid = mazzer_scale_pose * transl(*slide_mm)
     T_world_target_slid = mazzer_scale_pose_slid * T_fixture_placement
     task_b_slide_pose = rotate_about_tip(T_world_target_slid * T_tool_offset.inv(), tool_point_local, angle_adjust)
 
     # Builds the press pose by offsetting further along the fixture's own frame
-    mazzer_scale_pose_pressed = mazzer_scale_pose_slid * transl(*PRESS_MM)
+    mazzer_scale_pose_pressed = mazzer_scale_pose_slid * transl(*press_mm)
     T_world_target_pressed = mazzer_scale_pose_pressed * T_fixture_placement
     task_b_press_pose = rotate_about_tip(T_world_target_pressed * T_tool_offset.inv(), tool_point_local, angle_adjust)
 
@@ -62,21 +55,59 @@ def compute_task_b_poses(fixture_fine_tune_mm, approach_angle_adjust_deg):
 # Jogged joint waypoints for the unlock approach and the unlocked config,
 # tuned so the arm avoids the rancilio tool already sitting on the scale
 staging_intermediate_pose = [118.506308, -97.117079, 116.960032, -109.759306, -89.525329, -206.644986]
-locked_approach_pose = [100.175126, -73.098008, 118.468843, -104.907218, -35.456113, 14.167126]
-unlocked_retreat_pose = [99.331062, -73.629932, 122.148331, -107.046556, -35.890453, 12.926037]
+locked_approach_pose = [102.493138, -70.888207, 118.193559, -109.749013, -34.331486, 17.711122]
+unlocked_retreat_pose = [101.163578, -73.565929, 123.890487, -111.075789, -34.964000, 15.653966]
 
 
 def run_task_b(UR5, tls, RDK):
-    # Edit these in the lab
+    # ==================== FINE TUNING (edit these in the lab) ====================
 
-    # Shifts the mazzer scale's whole pose along its own local x, y, z directions to correct calibration drift
-    fixture_fine_tune_mm = (0, 0, 0)
+    # fixture_fine_tune_mm = (x, y, z) in mm
+    # Moves ALL THREE poses (lock, slide, press) together, by shifting the assumed position of the mazzer scale
+    # along the scale's own axes. Use it when the tool misses the lever from the very first contact.
+    #   x: shifts along the scale's local x
+    #   y: shifts along the scale's local y
+    #   z: shifts along the scale's local z
+    fixture_fine_tune_mm = (10, 0, 0)
 
-    # Rotates the tool's approach about the tip, since the rancilio tool
-    # will already be sitting on the mazzer scale when this task runs
+    # approach_angle_adjust_deg = (rx, ry, rz) in degrees
+    # Rotates the tool about its own x, y, z axes (x, then y, then z) for the lock, slide and press poses.
+    # It pivots about the tool tip (point 51), so the tip stays on the lever and only the tool's facing direction
+    # changes. Use it to change how the tool comes at the lever, e.g. to clear the rancilio tool sitting on the scale.
     approach_angle_adjust_deg = (0, 60, -130)
 
-    lock_pose, slide_pose, press_pose = compute_task_b_poses(fixture_fine_tune_mm, approach_angle_adjust_deg)
+    # slide_mm = (x, y, z) in mm
+    # How far the tool slides from the lock pose along the scale's own axes, before pressing the lever.
+    # Changes only the slide pose (and the press pose, which is built on top of it).
+    # Default -35 in x slides 35 mm along the scale's -x.
+    slide_mm = (-35, 0, 0)
+
+    # press_mm = (x, y, z) in mm
+    # How far the tool then pushes past the slide pose, along the scale's own axes, to flip the lever.
+    # Changes only the press pose. It adds on top of slide_mm. Default -10 in z pushes 10 mm along the scale's -z,
+    # make it bigger if the lever doesn't flip, smaller if the tool pushes too hard.
+    press_mm = (0, 0, -10)
+
+    # The joint poses below (locked_approach_pose, unlocked_retreat_pose, staging_intermediate_pose) are jogged
+    # joint angles, not affected by the settings above. If you move the fixture, re-jog them if the arm gets close
+    # to the rancilio tool.
+    # =============================================================================
+
+    lock_pose, slide_pose, press_pose = compute_task_b_poses(
+        fixture_fine_tune_mm, approach_angle_adjust_deg, slide_mm, press_mm)
+
+    # Optional, builds extra waypoints from the final tilted pose instead of using align_hover_mm
+    # Each offset is (name, (x, y, z) in mm, (rx, ry, rz) in degrees), applied in the tool's OWN frame,
+    # translation first then rotation. Each waypoint comes from task_a_pose on its own, they do not chain.
+    # For example, this backs the tool off 40 mm along its own z, keeping the tilt:
+    waypoints = compute_waypoints(press_pose, offsets=[
+        ("backoff", (0, 0, -30), (0, 0, 0)),
+    ])
+    # UR5.MoveL(waypoints["backoff"], True)
+    # UR5.MoveL(task_a_pose, True)
+
+    # Starts the robot at home
+    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
     # Picks up the mazzer tool from the tool stand
     tls.mazzer_tool_attach_l_ati()
@@ -89,18 +120,13 @@ def run_task_b(UR5, tls, RDK):
     UR5.MoveL(slide_pose, True)
     UR5.MoveL(press_pose, True)
     UR5.MoveL(unlocked_retreat_pose, True)
-
     UR5.MoveJ(staging_intermediate_pose, True)
 
     # Returns the mazzer tool
-    tls.mazzer_tool_detach_l_ati()
-
-
-def test_task_b(UR5, tls, RDK):
-    run_task_b(UR5, tls, RDK)
+    # tls.mazzer_tool_detach_l_ati()
 
     # Sends the robot home
-    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":
@@ -115,6 +141,6 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
-    RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
+    # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
-    test_task_b(UR5, tls, RDK)
+    run_task_b(UR5, tls, RDK)

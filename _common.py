@@ -27,6 +27,16 @@ def compute_waypoints(target_pose, offsets):
     # Builds a dict of named waypoints, each derived from target_pose by a
     # translation and rotation offset in the tool's own local frame
     # Offsets are given as name, x y z in mm, then rx ry rz in degrees
+    # Each waypoint is computed from target_pose independently, they do not chain off each other
+    # The translation is applied first, then the rotation in the order x, y, z
+    #
+    # Example, backs off 100 mm along the target's z to line up, then does a straight move in:
+    #   waypoints = compute_waypoints(target_pose, offsets=[
+    #       ("approach", (0, 0, -100), (0, 0, 0)),
+    #       ("angled",   (0, 0, -40),  (0, 10, 0)),
+    #   ])
+    #   UR5.MoveL(waypoints["approach"], True)
+    #   UR5.MoveL(target_pose, True)
     waypoints = {}
 
     for name, translation_mm, angle_deg in offsets:
