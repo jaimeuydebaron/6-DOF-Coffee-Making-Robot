@@ -1,0 +1,252 @@
+\documentclass[11pt,a4paper]{article}
+
+% ---------- packages ----------
+\usepackage[margin=25mm]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+
+% ---------- helpers ----------
+% Red placeholder text, delete each one once it is filled in
+\newcommand{\todo}[1]{\textcolor{red}{[#1]}}
+
+% Code listing style for the appendix
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny
+}
+
+% ---------- title ----------
+\title{ENMT482 Manipulators Assignment\\[2mm]
+       \large Automating Coffee Making with the UR5}
+\author{
+    Jaime Uy De Baron \\
+    Josh Bergerson \\
+    Johann Torres\\[2mm]
+    Group 16, Cart 3
+}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% ---------- abstract ----------
+\begin{abstract}
+The UR5 is a six-axis collaborative robot with a 5~kg payload capacity and 850~mm reach radius. This project aims to direct the UR5 to make a cup of coffee, from weighing out ground coffee to moving the finished coffee cup to a dedicated customer zone. 
+
+This report will quantify the economic utility of the UR5 for this task by comparing it to a civilian performing the same procedure, considering cost and time efficiency alike. 
+\end{abstract}
+
+% =====================================================================
+\section{Introduction}
+% =====================================================================
+\todo{State the aim. The UR5 performs the coffee making tasks (a to v) using
+the interchangeable tools, and a time and motion study quantifies whether
+automating the process is worthwhile.}
+
+% =====================================================================
+\section{Method}
+% =====================================================================
+% The brief does not say this section is required. Confirm with Chris or
+% Rodney, and delete it if it is not expected.
+
+\subsection{Locating the equipment}
+\todo{Explain how the pose of each fixture relative to the robot base was found
+from the points known in both frames. Include the planar case, the case with a
+known tilt, and the case using two measured axes, and state which fixture used
+which. Include one worked example with numbers, for instance the Rancilio
+frame.}
+
+\subsection{Tool and task poses}
+\todo{Explain how the TCP pose was found for each task by chaining the fixture
+pose, the task point in the fixture frame, and the tool offset. Show the chain
+equation.}
+
+\begin{equation}
+{}^{UR}T_{TCP} = {}^{UR}T_{fixture} \; {}^{fixture}T_{task} \; \left({}^{TCP}T_{task}\right)^{-1}
+\end{equation}
+
+\subsection{Calibration and refinement}
+\todo{List the values that were measured or tuned rather than calculated, and
+why each was needed. Examples are the fixture fine tune offsets, approach angle
+adjustments, lever pull angle, and jogged joint waypoints used to avoid
+collisions.}
+
+\begin{table}[h]
+\centering
+\caption{Values refined during testing.}
+\begin{tabular}{llll}
+\toprule
+Task & Value & Setting & Reason \\
+\midrule
+\todo{b} & \todo{fixture fine tune} & \todo{(x, y, z) mm} & \todo{reason} \\
+\todo{} & \todo{} & \todo{} & \todo{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Program structure}
+\todo{Briefly describe the file per task structure, the shared helper functions,
+and how the tasks are chained in sequence.}
+
+% =====================================================================
+\section{Time and Motion Study}
+% =====================================================================
+
+\subsection{Method}
+\todo{How the times were obtained. Human times come from the video of Rodney
+making a coffee. Robot times come from running the finalised code. State how
+each task was timed and any assumptions, such as whether tool changes are
+included in the task time.}
+
+\subsection{Results}
+
+\begin{table}[h]
+\centering
+\caption{Human and robot time for each task.}
+\begin{tabular}{clSS}
+\toprule
+Task & Description & {Human (\si{\second})} & {Robot (\si{\second})} \\
+\midrule
+a & Pick up the Rancilio tool and place it on the Mazzer Scale pan & 0 & 0 \\
+b & Unlock the Mazzer Scale & 0 & 0 \\
+c & Turn the Mazzer on, wait 15 s, turn it off & 0 & 0 \\
+d & Pull the dosing lever until 20 g is deposited & 0 & 0 \\
+e & Lock the Mazzer Scale & 0 & 0 \\
+f & Remove the Rancilio tool from the Mazzer & 0 & 0 \\
+g & Open the WDT fixture and place the Rancilio tool in & 0 & 0 \\
+h & Release the Rancilio tool and close the WDT fixture & 0 & 0 \\
+i & Turn the WDT rotor five revolutions & 0 & 0 \\
+j & Open the WDT fixture, remove the tool, close the fixture & 0 & 0 \\
+k & Place the Rancilio tool in the PUQ and wait 2 s & 0 & 0 \\
+l & Remove from the PUQ and insert in the group head & 0 & 0 \\
+m & Operate the cup dispenser & 0 & 0 \\
+n & Pick up the cup and place it on the Rancilio Scale pan & 0 & 0 \\
+o & Unlock the Rancilio Scale & 0 & 0 \\
+p & Operate the hot water switch until 32 g is dispensed & 0 & 0 \\
+q & Lock the Rancilio Scale & 0 & 0 \\
+r & Place the cup of coffee in the customer zone & 0 & 0 \\
+s & Remove the Rancilio tool from the group head & 0 & 0 \\
+t & Actuate the silicone brush for 5 s & 0 & 0 \\
+u & Actuate the bristle brush for 5 s & 0 & 0 \\
+v & Return the Rancilio tool to the tool stand & 0 & 0 \\
+\midrule
+\multicolumn{2}{l}{\textbf{Total, complete process}} & 0 & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\todo{Comment on the results. Which tasks dominate the robot's time, and where
+is the human faster or slower. Note tasks with fixed waits (15 s grind, 2 s
+tamp, 5 s brushes) that neither can shorten.}
+
+% =====================================================================
+\section{Financial Analysis}
+% =====================================================================
+
+\subsection{Given figures}
+
+\begin{table}[h]
+\centering
+\caption{Figures given in the assignment brief.}
+\begin{tabular}{ll}
+\toprule
+Item & Value \\
+\midrule
+Cost to purchase the UR5 & \SI{40000}{\$} \\
+Cost of tooling & \SI{5000}{\$} \\
+Annual maintenance of the UR5 & \SI{400}{\$}, plus \SI{3}{\hour} shutdown \\
+Hourly wage of an experienced barista & \SI{30}{\$\per\hour} \\
+Breaks per \SI{8}{\hour} shift & 2 $\times$ \SI{15}{\minute} plus \SI{30}{\minute} lunch \\
+Average price of a cup of coffee & \SI{5}{\$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Assumptions}
+% These are not given in the brief, so state your own and justify them
+\todo{State the assumptions the analysis depends on, with a reason for each.
+Examples are opening hours, operating days per year, demand in cups per hour
+compared with each method's maximum output, and whether the robot needs a human
+to refill cups or beans.}
+
+\begin{table}[h]
+\centering
+\caption{Assumptions used in the analysis.}
+\begin{tabular}{lll}
+\toprule
+Assumption & Value & Justification \\
+\midrule
+\todo{Operating hours per day} & \todo{} & \todo{} \\
+\todo{Operating days per year} & \todo{} & \todo{} \\
+\todo{Demand (cups per hour)} & \todo{} & \todo{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Cost comparison}
+\todo{Set out the calculation. Productive time per shift is the shift length
+minus breaks, which is \SI{7}{\hour} of a \SI{8}{\hour} shift. Compute the
+cups per hour each method can produce from the cycle times, the annual
+cost of each, and the annual saving.}
+
+\begin{align}
+\text{Cups per hour} &= \frac{3600}{t_{\text{cycle}}} \\
+\text{Annual saving} &= C_{\text{human, annual}} - C_{\text{robot, annual}} \\
+\text{Payback period} &= \frac{C_{\text{UR5}} + C_{\text{tooling}}}{\text{Annual saving}}
+\end{align}
+
+\todo{Results, including the payback period, and a short table or figure.}
+
+% =====================================================================
+\section{Other Factors}
+% =====================================================================
+\todo{Discuss factors beyond the direct cost comparison.}
+
+\begin{itemize}
+    \item \textbf{Speed improvements:} \todo{for example faster joint moves,
+    fewer tool changes, overlapping tasks, removing the fixed waits where
+    possible}
+    \item \textbf{Demand through the day:} \todo{what times people typically
+    buy coffee and how that affects utilisation of the robot}
+    \item \textbf{Other costs not included:} \todo{for example the coffee cart
+    equipment, cup and bean refills, cleaning, supervision, downtime,
+    insurance}
+    \item \textbf{Quality and consistency:} \todo{dose and water accuracy of
+    the robot compared with a human}
+    \item \textbf{Safety and customer experience:} \todo{}
+\end{itemize}
+
+% =====================================================================
+\section{Recommendation}
+% =====================================================================
+\todo{State clearly whether automating this task is worthwhile, and support it
+with the payback period and the key factors above.}
+
+% =====================================================================
+\section{Conclusion}
+% =====================================================================
+\todo{Short summary of what was achieved and the recommendation.}
+
+% ---------- references ----------
+% \begin{thebibliography}{9}
+% \bibitem{primer} ENMT482 Pose and Homogeneous Transforms primer.
+% \bibitem{gitlab} UC-02-2024 Coffee Cart Modifications, GitLab.
+% \end{thebibliography}
+
+% ---------- appendix ----------
+\appendix
+\section{Code}
+\todo{Include or link the task files if required. Delete this appendix if not.}
+
+% \lstinputlisting[language=Python, caption={\texttt{\_partA.py}}]{_partA.py}
+
+\end{document}

@@ -1,0 +1,108 @@
+# _common.py
+# Shared pose and geometry helpers used across _partA.py through _partM.py
+from robodk.robomath import *
+from __points import POINTS
+import math
+
+
+def get_point(key):
+    # Pulls the xyz coordinates for a point out of the points table
+    entry = POINTS[key]
+    return entry[3], entry[4], entry[5]
+
+
+def build_pose(rotation_columns, xyz):
+    # Builds a pose matrix from three rotation columns and a translation
+    col_x, col_y, col_z = rotation_columns
+    pose = eye(4)
+    for i in range(3):
+        pose[i, 0] = col_x[i]
+        pose[i, 1] = col_y[i]
+        pose[i, 2] = col_z[i]
+    pose[0, 3], pose[1, 3], pose[2, 3] = xyz
+    return pose
+
+
+def compute_waypoints(target_pose, offsets):
+    # Builds a dict of named waypoints, each derived from target_pose by a
+    # translation and rotation offset in the tool's own local frame
+    # Offsets are given as name, x y z in mm, then rx ry rz in degrees
+    # Each waypoint is computed from target_pose independently, they do not chain off each other
+    # The translation is applied first, then the rotation in the order x, y, z
+    #
+    # Example, backs off 100 mm along the target's z to line up, then does a straight move in:
+    #   waypoints = compute_waypoints(target_pose, offsets=[
+    #       ("approach", (0, 0, -100), (0, 0, 0)),
+    #       ("angled",   (0, 0, -40),  (0, 10, 0)),
+    #   ])
+    #   UR5.MoveL(waypoints["approach"], True)
+    #   UR5.MoveL(target_pose, True)
+    waypoints = {}
+
+    for name, translation_mm, angle_deg in offsets:
+        angle_offset = rotx(angle_deg[0]*pi/180) \
+                     * roty(angle_deg[1]*pi/180) \
+                     * rotz(angle_deg[2]*pi/180)
+        waypoints[name] = target_pose * transl(*translation_mm) * angle_offset
+
+    return waypoints
+
+
+def normalize(v):
+    # Scales a vector down to unit length
+    length = math.sqrt(sum(c**2 for c in v))
+    return tuple(c / length for c in v)
+
+
+def cross_product(a, b):
+    # Standard three dimensional cross product
+    return (
+        a[1]*b[2] - a[2]*b[1],
+        a[2]*b[0] - a[0]*b[2],
+        a[0]*b[1] - a[1]*b[0],
+    )
+
+
+def rotate_about_tip(pose, tip_offset_mm, angle_adjust):
+    # Rotates a pose about the tool's tip rather than about the tcp, so the
+    # tip stays put in place while only the tool's facing direction changes
+    return pose \
+        * transl(*tip_offset_mm) \
+        * angle_adjust \
+        * transl(*tuple(-c for c in tip_offset_mm))
+
+
+def solve_frame_rotation(origin_w, origin_l, ref_w, ref_l):
+    # Solves for the rotation angle in radians between a fixture's frame and
+    # the world frame, given the same origin and reference point measured in both
+    world_dx = ref_w[0] - origin_w[0]
+    world_dy = ref_w[1] - origin_w[1]
+    local_dx = ref_l[0] - origin_l[0]
+    local_dy = ref_l[1] - origin_l[1]
+
+    cross = local_dx * world_dy - local_dy * world_dx
+    dot   = local_dx * world_dx + local_dy * world_dy
+    return math.atan2(cross, dot)
+
+
+def compute_mazzer_pose():
+    # Gets the mazzer's origin and two reference points, one out along the
+    # local x axis and one out along the local y axis
+    origin_w = get_point(3)
+    x_ref_w = get_point(4)
+    y_ref_w = get_point(5)
+
+    # Finds the direction from the origin to each reference point in world coordinates
+    x_dir = tuple(x_ref_w[i] - origin_w[i] for i in range(3))
+    y_dir = tuple(y_ref_w[i] - origin_w[i] for i in range(3))
+
+    # Normalizes both directions into unit vectors, these become the x and y columns of the rotation matrix
+    x_axis = normalize(x_dir)
+    y_axis = normalize(y_dir)
+    x_axis = tuple(-c for c in x_axis)
+
+    # Takes the cross product to get a z axis that keeps the frame right handed
+    z_axis = cross_product(x_axis, y_axis)
+
+    mazzer_pose = build_pose([x_axis, y_axis, z_axis], origin_w)
+    return mazzer_pose
