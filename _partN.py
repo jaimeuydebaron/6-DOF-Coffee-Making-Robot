@@ -7,7 +7,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import get_point, build_pose, solve_frame_rotation
+from _common import get_point, build_pose, solve_frame_rotation, solve_joints_near
 from _partM import compute_cup_dispenser_pose
 
 
@@ -16,13 +16,13 @@ from _partM import compute_cup_dispenser_pose
 # held cup model, Cup_(UR5), whose tool point is the base of the cup
 HELD_CUP_BASE_BELOW_HOLDER_MM = 74.55
 
-# Arm configuration hints, right hand with the elbow up. The joint moves into each area go to the calculated pose,
-# solved for the joint angles closest to these, so the arm always arrives the same way round. They only pick which
-# of the arm's solutions is used, they do not change where the tool goes. The two are nearly the same, so carrying
-# the cup across is mostly the base turning, and the wrist (J5) is on the side that tilts the tool straight back
-# to the tool stand afterwards, about 100 degrees, rather than turning it the long way round
-PICK_CONFIG_HINT = [-196, -105, -103, -152, 194, -220]
-PLACE_CONFIG_HINT = [-167, -103, -96, -161, 193, -220]
+# Arm configuration hints, left hand with the elbow up, the same way round as home_l and the start of task l, so
+# the arm does not change configuration between tasks l, m and n. The joint moves into each area go to the
+# calculated pose, solved for the joint angles closest to these, so the arm always arrives the same way round.
+# They only pick which of the arm's solutions is used, they do not change where the tool goes. Both have the wrist
+# up (J5 positive), the wrist down solution puts the arm on the table cushion at the cup dispenser
+PICK_CONFIG_HINT = [11, -100, 144, -44, 101, 140]
+PLACE_CONFIG_HINT = [12, -86, 120, -34, 43, 140]
 
 
 def compute_rancilio_scale_pose(fixture_fine_tune_mm):
@@ -111,14 +111,6 @@ def compute_task_n_place_pose(fixture_fine_tune_mm, release_height_mm, approach_
     return task_n_place_pose
 
 
-def solve_joints_near(UR5, pose, config_hint):
-    # Solves the joint angles that put the master tool at pose, choosing the solution closest to config_hint
-    joints = UR5.SolveIK(pose, config_hint, UR5.PoseTool()).list()
-    if len(joints) < 6:
-        raise ValueError("No joint solution for this pose, it may be out of reach")
-    return joints[:6]
-
-
 def run_visual(RDK, program_name):
     # Runs one of the station's visual programs, these only change the simulation
     program = RDK.Item(program_name, ITEM_TYPE_PROGRAM)
@@ -127,21 +119,21 @@ def run_visual(RDK, program_name):
 
 
 def run_task_n(UR5, tls, RDK):
-    """ Does not return the robot home, ends empty handed in the right hand configuration at the cup tool's
+    """ Does not return the robot home, ends empty handed in the left hand configuration at the cup tool's
     approach pose on the tool stand, with the cup standing on the rancilio scale pan """
 
     # ==================== FINE TUNING (edit these in the lab) ====================
 
     # ----- Picking the cup out of the cup dispenser -----
     pick_fixture_fine_tune_mm = (0, 0, 0)  # moves the grip, along the dispenser's axes, x is up, z is into the dispenser
-    pick_yaw_deg = 60                      # turns the way the fork slides in, 60 faces it the same way as at the pan
+    pick_yaw_deg = 0                       # turns the way the fork slides in, 0 is straight in, square to the cups
     grip_below_rim_mm = 28                 # how far under the rim the open lower plate slides in, keep it above the fins
     pick_backoff_mm = 120                  # how far back the fork lines up before sliding in, and backs out to
     pick_lift_mm = 20                      # extra lift before backing out, clears the fins but not into the cup stack above
 
     # ----- Placing the cup on the rancilio scale pan -----
     place_fixture_fine_tune_mm = (0, 0, 0)  # moves the release, along the scale's axes, z is up
-    place_yaw_deg = 30                      # turns the way the fork slides in, 25 hits the rancilio tool, 35 the dispenser
+    place_yaw_deg = 0                       # turns the way the fork slides in, 0 is straight into the coffee machine
     release_height_mm = 5                   # how high the cup's base is above the pan when the holder opens
     place_backoff_mm = 140                  # how far back the fork lines up before sliding in, and backs out to
 
@@ -149,8 +141,6 @@ def run_task_n(UR5, tls, RDK):
     stand_pull_out_mm = 150  # how far straight out of the tool stand the tool comes before turning
     pick_entry_raise_mm = 60  # comes in this much higher over the dispenser after leaving the stand, then straight down
     carry_height_mm = 80     # how high above the lined up poses the cup is carried across between the two
-    carry_via_mm = (120, 120, 0)  # sidestep on the way across, world mm from above the pan, keeps the cup off the
-                                  # dispenser, +x is towards the mazzer side, +y towards the customer zone
     holder_wait_s = 1.0      # how long to wait after opening or shutting the holder, so it finishes moving
     # =============================================================================
 
@@ -174,9 +164,6 @@ def run_task_n(UR5, tls, RDK):
     place_approach_pose = place((0, 0, -place_backoff_mm))
     place_pose = place((0, 0, 0))
 
-    # The sidestep point on the way across, the same tool angle as above the pan
-    carry_via_pose = transl(*carry_via_mm) * place_above_pose
-
     # Makes sure the poses below are read in the robot base frame with the master tool, as the assignment requires
     UR5.setPoseFrame(RDK.Item("UR5_Base", ITEM_TYPE_FRAME))
     UR5.setTool(RDK.Item("Master_Tool_(UR5)", ITEM_TYPE_TOOL))
@@ -186,7 +173,7 @@ def run_task_n(UR5, tls, RDK):
 
     # Picks up the cup tool, then pulls straight out of the tool stand, along the stand's own x axis, before
     # turning, so the tool can not swing into the stand
-    tls.cup_tool_attach_r_ati()
+    tls.cup_tool_attach_l_ati()
     stand_frame = RDK.Item("Cup_Tool_(ATI)", ITEM_TYPE_FRAME).PoseAbs()
     pull_out = [stand_frame[i, 0] * stand_pull_out_mm for i in range(3)]
     stand_clear_pose = transl(*pull_out) * UR5.Pose()
@@ -216,10 +203,9 @@ def run_task_n(UR5, tls, RDK):
 
     # ---------- Places the cup on the rancilio scale pan ----------
 
-    # Carries the cup across up high, sidestepping away from the dispenser, comes down in line with the pan, then
-    # slides the cup in over it. The cup faces almost the same way at both ends, so this is mostly the base
-    # turning. Joint moves, since a straight line here passes near a wrist singularity
-    UR5.MoveJ(solve_joints_near(UR5, carry_via_pose, PLACE_CONFIG_HINT), True)
+    # Carries the cup straight across up high, turning at the base and the wrist to face the coffee machine, with no
+    # pulling back, then comes down in line with the pan and slides the cup in over it. A joint move, since a
+    # straight line here passes near a wrist singularity
     UR5.MoveJ(solve_joints_near(UR5, place_above_pose, PLACE_CONFIG_HINT), True)
     UR5.MoveL(place_approach_pose, True)
     UR5.MoveL(place_pose, True)
@@ -237,7 +223,7 @@ def run_task_n(UR5, tls, RDK):
 
     # Goes straight back to the point out from the tool stand, and returns the cup tool
     UR5.MoveJ(stand_clear_joints, True)
-    tls.cup_tool_detach_r_ati()
+    tls.cup_tool_detach_l_ati()
 
 
 if __name__ == "__main__":
@@ -253,12 +239,13 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Resets the simulation, then shows the rancilio tool locked in the group head, left there by task l, so a
-    # standalone test checks the place against it. Simulation only, comment both out on the real robot
-    run_visual(RDK, "Reset_Simulation_R")
-    run_visual(RDK, "Show_Rancilio_Rancilio_Tool_Rotated")
+    # Resets the simulation, then shows the rancilio tool set down on the mazzer scale, where task l leaves it while
+    # tasks m and n run. Simulation only, comment these out on the real robot
+    run_visual(RDK, "Reset_Simulation_L")
+    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
+    run_visual(RDK, "Show_Mazzer_Scale_Rancilio_Tool")
 
     run_task_n(UR5, tls, RDK)
 
     # Sends the robot home
-    UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)
+    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

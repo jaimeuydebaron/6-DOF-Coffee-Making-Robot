@@ -160,7 +160,7 @@ def run_task_k(UR5, tls, RDK):
     # Moves in and places the rancilio tool into the puq clamp
     # UR5.MoveJ(approach_intermediate_pose_1, True)
     # UR5.MoveJ(approach_intermediate_pose_2, True)
-    # UR5.MoveJ(approach_intermediate_pose_3, True)
+    UR5.MoveJ(approach_intermediate_pose_3, True)
 
     # UR5.MoveL(pre_insert_intermediate_pose, True)
     UR5.MoveL(task_k_pose, True)

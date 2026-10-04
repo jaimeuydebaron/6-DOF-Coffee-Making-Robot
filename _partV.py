@@ -22,7 +22,7 @@ def run_task_v(UR5, tls, RDK):
     tls.rancilio_tool_detach_l_ati()
 
     # sends the robot home, finishing the run
-    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":

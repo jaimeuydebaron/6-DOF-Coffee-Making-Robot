@@ -254,7 +254,7 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
-    RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
+    #RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
     # sim only: shows the cup on the rancilio scale, as it would be after task q
     RDK.Item("Show_Rancilio_Scale_Cup", ITEM_TYPE_PROGRAM).RunCode()

@@ -106,3 +106,28 @@ def compute_mazzer_pose():
 
     mazzer_pose = build_pose([x_axis, y_axis, z_axis], origin_w)
     return mazzer_pose
+
+
+# Home_L's joint angles, used as the hint for joint moves made in the left hand configuration
+LEFT_CONFIG_HINT = [180.0, -90.0, 90.0, -90.0, -90.0, -90.0]
+
+
+def solve_joints_near(UR5, pose, config_hint):
+    # Solves the joint angles that put the master tool at pose, choosing the solution closest to config_hint
+    # Only solutions with the shoulder up and the elbow bent the same way as the hint are kept, so a left hand
+    # hint always gives a left hand solution and a right hand hint a right hand one, since wrapped angles
+    # (e.g. j3 = 258.5 for -101.5) can otherwise make the other elbow look closer
+    solutions = UR5.SolveIK_All(pose, UR5.PoseTool())
+    best, best_dist = None, None
+    for c in range(solutions.size(1)):
+        joints = [solutions[r, c] for r in range(6)]
+        shoulder_up = -180 <= joints[1] <= 0
+        same_elbow = 0 < joints[2] * config_hint[2] and abs(joints[2]) < 180
+        if not (shoulder_up and same_elbow):
+            continue
+        dist = sum(abs(j - h) for j, h in zip(joints, config_hint))
+        if best_dist is None or dist < best_dist:
+            best, best_dist = joints, dist
+    if best is None:
+        raise ValueError("No joint solution for this pose in the hinted configuration, it may be out of reach")
+    return best
