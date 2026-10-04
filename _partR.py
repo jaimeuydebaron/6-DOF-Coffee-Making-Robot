@@ -239,7 +239,7 @@ def run_task_r(UR5, tls, RDK):
     UR5.MoveL(transl(0, 0, place_raise_mm) * place_waypoints["retreat"], True)
     tls.cup_tool_shut_ur5()
     tls.cup_tool_detach_l_ati()
-    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":

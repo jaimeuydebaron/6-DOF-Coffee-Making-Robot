@@ -83,6 +83,7 @@ def compute_task_s_pose(fixture_fine_tune_mm, handle_yaw_deg):
 # mate approach pose in the right hand configuration, so the joint move from home_r does not flip the elbow
 approach_general_point = [-120.1, -96.6, -121.6, -141.7, -75.1, 140.0]
 
+approach_point_1 = [23.561060, -88.604205, 127.365805, -38.761601, 68.598596, 140.000000]
 
 def run_task_s(UR5, tls, RDK):
     # edit these in the lab
@@ -99,23 +100,25 @@ def run_task_s(UR5, tls, RDK):
     # out of the group head (basket depth is 29.3), and how far the tool is pulled out afterwards
     mate_back_off_mm = 60
     drop_mm = 50
-    pull_out_mm = 150
+    pull_out_mm = 100
 
     locked_pose = compute_task_s_pose(fixture_fine_tune_mm, locked_yaw_deg)
     unlocked_pose = compute_task_s_pose(fixture_fine_tune_mm, locked_yaw_deg + unlock_turn_deg)
 
     # tool z runs along the handle, so backing off along -z lines the robot up with the tool's coupling
     waypoints = compute_waypoints(locked_pose, offsets=[
-        ("mate_approach", (0, 0, -mate_back_off_mm), (0, 0, 0)),
+        ("mate_approach", (0, 0, -50), (0, 0, 0)),
     ])
+
+    UR5.MoveJ(approach_point_1, True)
 
     # drops straight down in the world frame, then pulls back along the handle
     lowered_pose = transl(0, 0, -drop_mm) * unlocked_pose
     pulled_out_pose = lowered_pose * transl(0, 0, -pull_out_mm)
 
-    # lines up behind the tool in the group head and mates with it
-    UR5.MoveJ(approach_general_point, True)
-    UR5.MoveL(waypoints["mate_approach"], True)
+    # # lines up behind the tool in the group head and mates with it
+    # UR5.MoveJ(approach_general_point, True)
+    # UR5.MoveL(waypoints["mate_approach"], True)
     UR5.MoveL(locked_pose, True)
     tls.student_tool_attach()
 
@@ -131,12 +134,11 @@ def run_task_s(UR5, tls, RDK):
     for i in range(1, steps + 1):
         UR5.MoveL(compute_task_s_pose(fixture_fine_tune_mm, locked_yaw_deg + unlock_turn_deg * i / steps), True)
 
-    # drops the basket out of the group head and pulls the tool out from under the machine
+    # drops the basket out of the group head and pulls the tool back a bit from under the machine
     UR5.MoveL(lowered_pose, True)
     UR5.MoveL(pulled_out_pose, True)
 
-    # sends the robot home holding the tool, ready for cleaning in task t
-    UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)
+    # finishes pulled back from the machine, ready to swing straight over to the tool cleaner in task t
 
 
 if __name__ == "__main__":
@@ -151,7 +153,7 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
-    RDK.Item("Reset_Simulation_R", ITEM_TYPE_PROGRAM).RunCode()
+    # RDK.Item("Reset_Simulation_R", ITEM_TYPE_PROGRAM).RunCode()
 
     # sim only: puts the rancilio tool in the group head and takes it off the tool stand, as it would be after task l
     RDK.Item("Show_Rancilio_Rancilio_Tool_Rotated", ITEM_TYPE_PROGRAM).RunCode()
