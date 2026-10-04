@@ -13,7 +13,7 @@ TARGET_G = 20.0
 TOLERANCE_G = 0.1
 
 # Time for the grounds to settle before the scale is read
-SETTLE_SECONDS = 2
+SETTLE_SECONDS = 0
 
 
 def rotate_about_point_world_z(pose, pivot_point_world, angle_deg):
@@ -121,33 +121,31 @@ def return_to_start(UR5, pull_steps, start_pose):
 
 
 def dose_until_target(UR5, client, pull_steps, start_pose, max_pulls):
-    # Pulls the dose lever repeatedly until the scale reports the target dose
-    # The scale is not assumed to be zeroed, so the dose is measured against a baseline reading
-    # Every exit leaves the tool at the pulled position, ready for the retreat
+    # Tares the scale, then does a full pull, reads the scale and releases the lever, repeating until the
+    # dose is in the target window. Every exit leaves the tool at the start pose
     sleep(SETTLE_SECONDS)
-    baseline_g = read_scale_grams(client)
-    print(f"[task d] Baseline reading {baseline_g:.1f} g")
+    client.tare()
+    sleep(SETTLE_SECONDS)
 
     dosed_g = 0.0
     for pull_number in range(1, max_pulls + 1):
         pull_once(UR5, pull_steps)
 
         sleep(SETTLE_SECONDS)
-        dosed_g = read_scale_grams(client) - baseline_g
+        dosed_g = read_scale_grams(client)
         print(f"[task d] Pull {pull_number}, dosed {dosed_g:.1f} g")
 
-        if abs(dosed_g - TARGET_G) <= TOLERANCE_G:
-            print("[task d] Target dose reached")
-            return dosed_g
+        return_to_start(UR5, pull_steps, start_pose)
 
-        if dosed_g > TARGET_G + TOLERANCE_G:
-            print("[task d] WARNING, overdosed, stopping the pulls")
-            return dosed_g
+        if dosed_g >= TARGET_G - TOLERANCE_G:
+            break
 
-        if pull_number < max_pulls:
-            return_to_start(UR5, pull_steps, start_pose)
-
-    print(f"[task d] WARNING, target dose not reached after {max_pulls} pulls")
+    if dosed_g > TARGET_G + TOLERANCE_G:
+        print("[task d] WARNING, overdosed")
+    elif dosed_g >= TARGET_G - TOLERANCE_G:
+        print("[task d] Target dose reached")
+    else:
+        print(f"[task d] WARNING, target dose not reached after {max_pulls} pulls")
     return dosed_g
 
 staging_intermediate_pose = [118.506308, -97.117079, 116.960032, -109.759306, -89.525329, -206.644986]
@@ -199,7 +197,7 @@ def run_task_d(UR5, tls, RDK):
     # max_pulls
     # Only matters when use_scale is True. The most pulls allowed before it gives up, so a broken scale
     # can't make the robot pull forever.
-    max_pulls = 50
+    max_pulls = 5
 
     # The target dose (TARGET_G), the tolerance (TOLERANCE_G) and the wait for the grounds to settle before
     # the scale is read (SETTLE_SECONDS) are constants at the top of this file, not here.
@@ -226,6 +224,7 @@ def run_task_d(UR5, tls, RDK):
     # Builds the pull arc from the pose the jogged pre pull joints correspond to
     lever_start_cartesian = UR5.SolveFK(lever_off_intermediate_pose)
     pull_steps = compute_task_d_pull_steps(lever_start_cartesian, pull_angle_deg, num_steps, pivot_fine_tune_mm)
+
 
     # Run once with collision detection on to catch an unreachable point partway through the sweep
     # check_arc_reachable(UR5, pull_steps)
@@ -256,7 +255,7 @@ def run_task_d(UR5, tls, RDK):
         print("[task d] Scale not in use, pulling the lever once")
         pull_once(UR5, pull_steps)
 
-    # Retreats from the pulled position back out through the staging poses
+    # Retreats from the lever back out through the staging poses
     UR5.MoveL(retreat_intermediate_pose_1, True)
     UR5.MoveJ(approach_intermediate_pose_4, True)
     UR5.MoveJ(approach_intermediate_pose_3, True)
