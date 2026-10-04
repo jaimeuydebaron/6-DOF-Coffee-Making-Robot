@@ -9,7 +9,7 @@ from robodk.robomath import *
 from time import sleep, time
 import tools
 from _common import get_point, build_pose, solve_joints_near
-from _partL import compute_rancilio_pose
+from _partLlefthand import compute_rancilio_pose
 from _partN import run_visual
 from _partO import LEVER_CONFIG_HINT
 
