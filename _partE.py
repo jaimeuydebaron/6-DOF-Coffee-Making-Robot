@@ -88,7 +88,7 @@ def run_task_e(UR5, tls, RDK):
     # How far the tool then pushes past the slide pose, along the scale's own axes, to flip the lever back to locked.
     # Changes only the press pose. It adds on top of slide_mm. Default -15 in z pushes 15 mm along the scale's -z,
     # make it bigger if the lever doesn't flip, smaller if the tool pushes too hard.
-    press_mm = (0, 0, -10)
+    press_mm = (0, 0, -11)
 
     # The joint poses below (staging_intermediate_pose, lock_approach_joints, lock_locked_joints) are jogged joint
     # angles, not affected by the settings above. lock_locked_joints is where the tool retreats to after the press,

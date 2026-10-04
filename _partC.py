@@ -54,6 +54,7 @@ def compute_task_c_off_pose(fixture_fine_tune_mm, approach_angle_adjust_deg):
 
 # Jogged pose that clears the mazzer body on the way in from home
 staging_intermediate_pose = [118.506308, -97.117079, 116.960032, -109.759306, -89.525329, -206.644986]
+approach_intermediate_pose_1 = [98.510000, -97.120000, 116.960000, -109.760000, -89.530000, -206.640000]
 
 # Joint waypoint that ensures the on button is approached at the right angle
 on_button_approach_pose = [99.408373, -61.514148, 105.709453, -40.390944, 22.650255, 105.236545]
@@ -72,7 +73,7 @@ def run_task_c(UR5, tls, RDK):
     #   x: shifts along the mazzer's local x
     #   y: shifts along the mazzer's local y
     #   z: shifts along the mazzer's local z
-    on_fixture_fine_tune_mm = (-32, -20, 50)
+    on_fixture_fine_tune_mm = (-32, -20, 52)
 
     # on_approach_angle_adjust_deg = (rx, ry, rz) in degrees
     # Rotates the tool about its own x, y, z axes (x, then y, then z) at the ON button pose.
@@ -82,7 +83,7 @@ def run_task_c(UR5, tls, RDK):
 
     # off_fixture_fine_tune_mm = (x, y, z) in mm
     # Same as on_fixture_fine_tune_mm, but for the OFF button.
-    off_fixture_fine_tune_mm = (-32, -20, 50)
+    off_fixture_fine_tune_mm = (-30, -18, 48)
 
     # off_approach_angle_adjust_deg = (rx, ry, rz) in degrees
     # Same as on_approach_angle_adjust_deg, but for the OFF button.
@@ -98,15 +99,16 @@ def run_task_c(UR5, tls, RDK):
     off_pose = compute_task_c_off_pose(off_fixture_fine_tune_mm, off_approach_angle_adjust_deg)
 
     # Starts the robot at home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
     # Picks up the mazzer tool from the tool stand
-    # tls.mazzer_tool_attach_l_ati()
+    tls.mazzer_tool_attach_l_ati()
 
     # Moves in, through a jogged joint waypoint, to press the on button
     UR5.MoveJ(staging_intermediate_pose, True)
+    UR5.MoveJ(approach_intermediate_pose_1, True)
     UR5.MoveJ(on_button_approach_pose, True)
-    UR5.MoveJ(on_pose, True)
+    UR5.MoveL(on_pose, True)
     UR5.MoveJ(on_button_approach_pose, True)
 
     sleep(3)  # Grind time, currently a placeholder for testing rather than the real brew length
@@ -117,11 +119,12 @@ def run_task_c(UR5, tls, RDK):
     UR5.MoveL(off_button_approach_pose, True)
 
     # Retreats and returns the mazzer tool
+    UR5.MoveJ(approach_intermediate_pose_1, True)
     UR5.MoveJ(staging_intermediate_pose, True)
-    # tls.mazzer_tool_detach_l_ati()
+    tls.mazzer_tool_detach_l_ati()
 
     # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":
