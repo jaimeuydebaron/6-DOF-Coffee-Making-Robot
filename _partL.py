@@ -10,7 +10,7 @@ from _common import get_point, build_pose, solve_frame_rotation
 import _partK as part_k
 import _partF as part_f
 import _partA as part_a
-from _partF import compute_task_f_pose
+from _partF import compute_task_f_pose, compute_waypoints
 
 
 def compute_rancilio_pose(fixture_fine_tune_mm):
@@ -33,12 +33,14 @@ def compute_rancilio_pose(fixture_fine_tune_mm):
 
 
 def compute_task_l_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, extra_tilt_deg=0, handle_yaw_deg=0,
-                        approach_offset_mm=(0, 0, 0)):
+                        approach_offset_mm=(0, 0, 0), group_head_tilt_deg=0):
     rancilio_pose = compute_rancilio_pose(fixture_fine_tune_mm)
 
     # Sets the placement point as the group head gasket centre, with the tool orientation found by inspection,
-    # the basket's opening facing up into the group head and the handle out along the fixture's negative x axis,
-    # then spun about the vertical by handle_yaw_deg so the handle can point out of the machine the right way
+    # the basket's opening facing up into the group head and the handle out along the group head's negative x axis,
+    # then spun about the group head's axis by handle_yaw_deg so the handle can point out of the machine the right way
+    # The group head frame (point 38) is rotated about the rancilio's positive y axis by group_head_tilt_deg, so the
+    # tool is tilted with it, and the yaw is then about the group head's own tilted axis
     point_local = get_point(38)
     axis_mapping = [
         [0, 0, 1],   # Tool x axis lines up with the fixture's z axis, the basket faces up
@@ -46,7 +48,7 @@ def compute_task_l_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, extra_t
         [-1, 0, 0],  # Tool z axis lines up with the fixture's negative x axis, the handle direction
     ]
     T_fixture_orientation = build_pose(axis_mapping, (0, 0, 0))
-    T_fixture_placement = transl(*point_local) * rotz(handle_yaw_deg * pi/180) * T_fixture_orientation
+    T_fixture_placement = transl(*point_local) * roty(group_head_tilt_deg * pi/180) * rotz(handle_yaw_deg * pi/180) * T_fixture_orientation
 
     # Shifts the target along the fixture's own axes by approach_offset_mm, zero for the final insertion pose
     T_world_target = rancilio_pose * transl(*approach_offset_mm) * T_fixture_placement
@@ -70,24 +72,22 @@ def compute_task_l_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, extra_t
     return task_l_pose
 
 
-def compute_task_l_twist_steps(start_pose, fixture_fine_tune_mm, twist_deg, num_steps):
-    # Turns the tool about the group head's vertical axis, through the gasket centre, in several small steps so the
-    # motion follows the bayonet's rotation. Positive twist_deg turns anticlockwise seen from above, which is
+def compute_task_l_twist_steps(start_pose, fixture_fine_tune_mm, twist_deg, num_steps, group_head_tilt_deg=0):
+    # Turns the tool about the group head's axis, through the gasket centre, in several small steps so the
+    # motion follows the bayonet's rotation. The axis is the group head frame's z axis, which is tilted off the
+    # vertical by group_head_tilt_deg. Positive twist_deg turns anticlockwise seen from above, which is
     # clockwise seen from below, the direction the lab frames diagram shows for locking the tool in
     rancilio_pose = compute_rancilio_pose(fixture_fine_tune_mm)
-    gasket_pose = rancilio_pose * transl(*get_point(38))
-    pivot_world = tuple(gasket_pose[i, 3] for i in range(3))
-
-    to_pivot = transl(*pivot_world)
-    from_pivot = transl(*tuple(-c for c in pivot_world))
+    gasket_pose = rancilio_pose * transl(*get_point(38)) * roty(group_head_tilt_deg * pi/180)
 
     steps = []
     for i in range(1, num_steps + 1):
         angle = twist_deg * i / num_steps
-        steps.append(to_pivot * rotz(angle * pi/180) * from_pivot * start_pose)
+        steps.append(gasket_pose * rotz(angle * pi/180) * gasket_pose.inv() * start_pose)
 
     return steps
 
+left_scale_approach_intermediate_pose_1 = [96.730000, -98.710000, 145.110000, -46.390000, 6.730000, 140.000000]
 
 # Jogged joint waypoints for the right hand configuration's way in to the mazzer scale to pick the tool back up
 right_scale_approach_intermediate_pose_1 = [-5.561158, -102.188031, -134.759147, -121.113159, -34.300755, 138.409574]
@@ -103,7 +103,7 @@ rancilio_approach_intermediate_pose_2 = [-105.130000, -80.770000, -149.690000, -
 
 # Jogged joint waypoints that leave the rancilio once the tool is locked in, the second is the tool change pose
 # that part m starts from
-rancilio_retreat_intermediate_pose = [-134.418811, -92.190934, -128.559473, -137.494634, -104.374808, 140.435821]
+rancilio_retreat_intermediate_pose = [-132.415649, -98.445562, -122.970457, -135.103261, -102.355981, 140.745697]
 right_tool_change_intermediate_pose = [-91.989698, -76.115205, -110.455656, -83.428027, 90.001558, -236.989611]
 
 
@@ -146,6 +146,12 @@ def run_task_l(UR5, tls, RDK):
     #   y: shifts along the rancilio's local y
     #   z: raises (+) or lowers (-) the tool, use this if the basket is too low to seal or presses too hard
     fixture_fine_tune_mm = (0, 0, 0)
+
+    # group_head_tilt_deg
+    # How far the group head frame (point 38) is rotated about the positive y axis of the local rancilio frame,
+    # from the lab technician. The tool is inserted and twisted along this tilted axis. Set it for the robot in use:
+    #   robot 1: 1.5, robot 2: 1.6, robot 3: 1.7
+    group_head_tilt_deg = 1.7
 
     # approach_angle_adjust_deg = (rx, ry, rz) in degrees
     # Rotates the tool about its own x, y, z axes (x, then y, then z) at the insertion pose, before the tilt.
@@ -200,10 +206,13 @@ def run_task_l(UR5, tls, RDK):
 
     # Computes the pose lined up below the group head, the pose fully inserted, and the poses through the twist
     task_l_approach_pose = compute_task_l_pose(
-        fixture_fine_tune_mm, approach_angle_adjust_deg, extra_tilt_deg, handle_yaw_deg, approach_offset_mm)
+        fixture_fine_tune_mm, approach_angle_adjust_deg, extra_tilt_deg, handle_yaw_deg, approach_offset_mm,
+        group_head_tilt_deg)
     task_l_pose = compute_task_l_pose(
-        fixture_fine_tune_mm, approach_angle_adjust_deg, extra_tilt_deg, handle_yaw_deg)
-    twist_steps = compute_task_l_twist_steps(task_l_pose, fixture_fine_tune_mm, twist_deg, num_twist_steps)
+        fixture_fine_tune_mm, approach_angle_adjust_deg, extra_tilt_deg, handle_yaw_deg,
+        group_head_tilt_deg=group_head_tilt_deg)
+    twist_steps = compute_task_l_twist_steps(
+        task_l_pose, fixture_fine_tune_mm, twist_deg, num_twist_steps, group_head_tilt_deg)
 
     # Makes sure the poses below are read in the robot base frame with the master tool, as the assignment requires
     # The tool change routines leave the frame on the tool stand's frame until they finish, so a run that was cut
@@ -214,6 +223,16 @@ def run_task_l(UR5, tls, RDK):
     # The tool attached to the robot, hidden and shown below as the tool moves between the robot and the fixtures
     attached_tool = RDK.Item("Rancilio_Tool_(UR5)", ITEM_TYPE_TOOL)
 
+    # Optional, builds extra waypoints from the final tilted pose instead of using align_hover_mm
+    # Each offset is (name, (x, y, z) in mm, (rx, ry, rz) in degrees), applied in the tool's OWN frame,
+    # translation first then rotation. Each waypoint comes from task_a_pose on its own, they do not chain.
+    # For example, this backs the tool off 40 mm along its own z, keeping the tilt:
+    waypoints = compute_waypoints(twist_steps[-1], offsets=[
+        ("backoff", (0, 0, -30), (0, 0, 0)),
+    ])
+    # UR5.MoveL(waypoints["backoff"], True)
+    # UR5.MoveL(task_a_pose, True)
+
     # ---------- Left hand, takes the tool out of the puq and sets it down on the mazzer scale ----------
 
     # Takes the tool out of the puq, backing out to the same pose part k pulled it out to, this is
@@ -223,7 +242,7 @@ def run_task_l(UR5, tls, RDK):
     # Comes back the way part k went in, then across to the mazzer scale the way part f goes in
     UR5.MoveJ(part_k.approach_intermediate_pose_3, True)
     UR5.MoveJ(part_k.approach_intermediate_pose_2, True)
-    UR5.MoveJ(part_k.approach_intermediate_pose_1, True)
+    UR5.MoveJ(left_scale_approach_intermediate_pose_1, True)
     UR5.MoveJ(part_f.retreat_intermediate_pose_1, True)
     UR5.MoveL(part_f.rancilio_align_intermediate_pose, True)
     UR5.MoveJ(part_a.approach_intermediate_pose_3, True)
@@ -272,7 +291,6 @@ def run_task_l(UR5, tls, RDK):
     # Carries the tool across to the rancilio
     UR5.MoveJ(rancilio_approach_intermediate_pose_1, True)
     UR5.MoveJ(rancilio_approach_intermediate_pose_2, True)
-
 
     # Lines up below the group head, then moves up until the basket meets the gasket
     UR5.MoveJ(task_l_approach_pose, True)
