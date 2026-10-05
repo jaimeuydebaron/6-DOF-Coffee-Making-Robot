@@ -3,7 +3,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import get_point, build_pose, rotate_about_tip, solve_frame_rotation, compute_waypoints
+from _common import get_point, build_pose, rotate_about_tip, solve_frame_rotation, compute_waypoints, run_visual, enable_step_mode
 
 def compute_task_b_poses(fixture_fine_tune_mm, approach_angle_adjust_deg, slide_mm, press_mm):
     # Gets the mazzer scale's origin and a reference point, in both world and local coordinates
@@ -86,7 +86,7 @@ def run_task_b(UR5, tls, RDK):
     # How far the tool then pushes past the slide pose, along the scale's own axes, to flip the lever.
     # Changes only the press pose. It adds on top of slide_mm. Default -10 in z pushes 10 mm along the scale's -z,
     # make it bigger if the lever doesn't flip, smaller if the tool pushes too hard.
-    press_mm = (0, 0, -10)
+    press_mm = (0, 0, -11)
 
     # The joint poses below (locked_approach_pose, unlocked_retreat_pose, staging_intermediate_pose) are jogged
     # joint angles, not affected by the settings above. If you move the fixture, re-jog them if the arm gets close
@@ -106,9 +106,6 @@ def run_task_b(UR5, tls, RDK):
     # UR5.MoveL(waypoints["backoff"], True)
     # UR5.MoveL(task_a_pose, True)
 
-    # Starts the robot at home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-
     # Picks up the mazzer tool from the tool stand
     tls.mazzer_tool_attach_l_ati()
 
@@ -119,14 +116,11 @@ def run_task_b(UR5, tls, RDK):
     UR5.MoveL(lock_pose, True)
     UR5.MoveL(slide_pose, True)
     UR5.MoveL(press_pose, True)
+    run_visual(RDK, "Show_Mazzer_Scale_Read")
     UR5.MoveL(unlocked_retreat_pose, True)
     UR5.MoveJ(staging_intermediate_pose, True)
 
-    # # Returns the mazzer tool, part c picks it up again from home
-    # tls.mazzer_tool_detach_l_ati()
-
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    # Ends still holding the mazzer tool, for task c
 
 
 if __name__ == "__main__":
@@ -141,6 +135,19 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
+    # Shows the rancilio tool sitting on the mazzer scale and takes it off the tool stand, as task a leaves it.
+    # Simulation only
+    run_visual(RDK, "Show_Mazzer_Scale_Rancilio_Tool")
+    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
+
     run_task_b(UR5, tls, RDK)
+
+    # Returns the mazzer tool and sends the robot home, in the full run task c carries on still holding it
+    tls.mazzer_tool_detach_l_ati()
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

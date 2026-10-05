@@ -3,7 +3,10 @@
 from robodk.robolink import ITEM_TYPE_PROGRAM
 from robodk.robomath import *
 from __points import POINTS
+import linecache
 import math
+import msvcrt
+import sys
 
 
 def get_point(key):
@@ -136,3 +139,36 @@ def run_visual(RDK, program_name):
     program = RDK.Item(program_name, ITEM_TYPE_PROGRAM)
     program.RunCode()
     program.WaitFinished()
+
+
+def enable_step_mode(UR5, tls=None):
+    # Makes the robot wait for a key press in the terminal before every MoveJ and MoveL, for testing one task on its
+    # own. Enter does the move, c carries on to the end without stopping again, escape stops the script before the
+    # move. Pass tls as well to step through the tool stand routines, which move through their own robot item
+    # Only the __main__ block at the bottom of each task file calls this, so the full run in __main.py never waits
+    state = {"paused": True, "count": 0}
+
+    def wait_then(move, kind):
+        def stepped(*args, **kwargs):
+            state["count"] += 1
+            if state["paused"]:
+                caller = sys._getframe(1)
+                source = linecache.getline(caller.f_code.co_filename, caller.f_lineno).strip()
+                print(f"[step {state['count']}] {kind}: {source}")
+                print("    enter to move, c to carry on without stopping, escape to stop here")
+                while True:
+                    key = msvcrt.getch()
+                    if key == b"\r":
+                        break
+                    if key in (b"c", b"C"):
+                        state["paused"] = False
+                        break
+                    if key == b"\x1b":
+                        raise SystemExit(f"Stopped before step {state['count']}, the robot has not made this move")
+            return move(*args, **kwargs)
+        return stepped
+
+    robots = [UR5] if tls is None else [UR5, tls.UR5]
+    for robot in robots:
+        robot.MoveJ = wait_then(robot.MoveJ, "MoveJ")
+        robot.MoveL = wait_then(robot.MoveL, "MoveL")

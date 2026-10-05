@@ -7,7 +7,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import get_point, build_pose, solve_frame_rotation, run_visual
+from _common import get_point, build_pose, solve_frame_rotation, run_visual, enable_step_mode
 from _partM import compute_cup_dispenser_pose
 
 
@@ -213,20 +213,17 @@ def run_task_n(UR5, tls, RDK):
     UR5.setPoseFrame(RDK.Item("UR5_Base", ITEM_TYPE_FRAME))
     UR5.setTool(RDK.Item("Master_Tool_(UR5)", ITEM_TYPE_TOOL))
 
-    # Shows the cup sitting in the cup dispenser, dropped there by task m
-    run_visual(RDK, "Show_Cup_Dispenser_Cup")
-
     # Picks up the cup tool, then pulls straight out of the tool stand, along the stand's own x axis, before
     # turning, so the tool can not swing into the stand
-    # tls.cup_tool_attach_l_ati()
-    # UR5.MoveJ(pick_approach_intermediate_pose_2, True)
+    tls.cup_tool_attach_l_ati()
+    UR5.MoveJ(pick_approach_intermediate_pose_2, True)
 
-    # # ---------- Picks the cup up out of the cup dispenser ----------
+    # ---------- Picks the cup up out of the cup dispenser ----------
 
-    # # Turns to face the cup dispenser up high at the jogged pose, comes down in front of the cup, and opens the holder
-    # UR5.MoveJ(pick_approach_intermediate_pose_1, True)
-    # UR5.MoveL(pick_above_pose, True)
-    # UR5.MoveL(pick_approach_pose, True)
+    # Turns to face the cup dispenser up high at the jogged pose, comes down in front of the cup, and opens the holder
+    UR5.MoveJ(pick_approach_intermediate_pose_1, True)
+    UR5.MoveL(pick_above_pose, True)
+    UR5.MoveL(pick_approach_pose, True)
     tls.cup_tool_open_ur5()
     sleep(holder_wait_s)
 
@@ -255,7 +252,7 @@ def run_task_n(UR5, tls, RDK):
     tls.cup_tool_open_ur5()
     sleep(holder_wait_s)
     run_visual(RDK, "Hide_Cup_Tool_Cup")
-    run_visual(RDK, "Show_Rancilio_Rancilio_Tool_Rotated")
+    run_visual(RDK, "Show_Rancilio_Scale_Cup")
 
     # Backs the fork out from around the cup, rises, and shuts the holder again
     UR5.MoveL(place_approach_pose, True)
@@ -265,9 +262,6 @@ def run_task_n(UR5, tls, RDK):
     # Goes straight back to the point out from the tool stand, and returns the cup tool
     UR5.MoveJ(pick_approach_intermediate_pose_2, True)
     tls.cup_tool_detach_l_ati()
-
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":
@@ -283,10 +277,18 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Resets the simulation, then shows the rancilio tool set down on the mazzer scale, where task l leaves it while
-    # tasks m and n run. Simulation only, comment these out on the real robot
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # run_visual(RDK, "Reset_Simulation_L")
-    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
+
+    # Shows the rancilio tool set down on the mazzer scale and takes it off the tool stand, where task l leaves it
+    # while tasks m and n run, and the cup sitting in the cup dispenser, dropped there by task m. Simulation only
     run_visual(RDK, "Show_Mazzer_Scale_Rancilio_Tool")
+    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
+    run_visual(RDK, "Show_Cup_Dispenser_Cup")
 
     run_task_n(UR5, tls, RDK)
+
+    # Sends the robot home, in the full run task l carries straight on from the tool stand
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

@@ -9,7 +9,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import get_point, build_pose, rotate_about_tip, compute_waypoints, run_visual
+from _common import get_point, build_pose, rotate_about_tip, compute_waypoints, run_visual, enable_step_mode
 from _partN import compute_rancilio_scale_pose
 
 
@@ -97,7 +97,7 @@ def run_task_o(UR5, tls, RDK):
     # How far the tool then pushes past the slide pose, along the scale's own axes, to flip the lever.
     # Changes only the press pose. It adds on top of slide_mm. Default -10 in z pushes 10 mm along the scale's -z,
     # make it bigger if the lever doesn't flip, smaller if the tool pushes too hard.
-    press_mm = (0, 0, -10)
+    press_mm = (0, 0, -11)
 
     # backoff_mm
     # How far back along the tool's own z the tip backs off to after pressing the lever, before heading out through
@@ -146,9 +146,6 @@ def run_task_o(UR5, tls, RDK):
     UR5.MoveL(retreat_pose, True)
     UR5.MoveJ(approach_intermediate_pose_3, True)
 
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-
 
 if __name__ == "__main__":
     RDK = Robolink()
@@ -163,10 +160,19 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Resets the simulation, then shows what parts l and n leave behind, the rancilio tool in the group head and
-    # the cup on the scale pan. Simulation only, comment these out on the real robot
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # run_visual(RDK, "Reset_Simulation_L")
+
+    # Shows what tasks l and n leave behind, the rancilio tool in the group head, off the tool stand, and the cup on
+    # the scale pan. Simulation only
     run_visual(RDK, "Show_Rancilio_Rancilio_Tool_Rotated")
+    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
     run_visual(RDK, "Show_Rancilio_Scale_Cup")
 
     run_task_o(UR5, tls, RDK)
+
+    # Returns the mazzer tool and sends the robot home, in the full run task p carries on still holding it
+    tls.mazzer_tool_detach_l_ati()
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

@@ -6,7 +6,7 @@
 from robodk.robolink import *
 from robodk.robomath import *
 import tools
-from _common import get_point, build_pose, solve_frame_rotation, solve_joints_near, compute_waypoints
+from _common import get_point, build_pose, solve_frame_rotation, solve_joints_near, compute_waypoints, run_visual, enable_step_mode
 import _partK as part_k
 import _partF as part_f
 import _partA as part_a
@@ -256,10 +256,7 @@ def run_task_l(UR5, tls, RDK):
     # Releases the tool, and shows the ghost object left behind in the tool's place, the same way part a does
     tls.student_tool_detach()
     attached_tool.setVisible(False, False)
-
-    show_rancilio = RDK.Item("Show_Mazzer_Scale_Rancilio_Tool", ITEM_TYPE_PROGRAM)
-    show_rancilio.RunCode()
-    show_rancilio.WaitFinished()
+    run_visual(RDK, "Show_Mazzer_Scale_Rancilio_Tool")
 
     # Retreats clear of the mazzer scale, then carries straight on into task m in the left hand configuration
     UR5.MoveJ(part_a.retreat_intermediate_pose_1, True)
@@ -272,8 +269,8 @@ def run_task_l(UR5, tls, RDK):
     # Both run in the left hand configuration, carrying on from home_l without changing configuration, m ends with
     # the mazzer tool back on the stand and n ends empty handed at the cup tool's approach pose on the tool stand
 
-    # part_m.run_task_m(UR5, tls, RDK)
-    # part_n.run_task_n(UR5, tls, RDK)
+    part_m.run_task_m(UR5, tls, RDK)
+    part_n.run_task_n(UR5, tls, RDK)
 
     # ---------- Stays in the left hand configuration, and picks the tool up from the mazzer scale ----------
 
@@ -284,10 +281,7 @@ def run_task_l(UR5, tls, RDK):
 
     # Grabs the tool, hides the ghost object, and shows it attached to the robot instead, the same way part f does
     attached_tool.setVisible(True, False)
-
-    hide_rancilio = RDK.Item("Hide_Mazzer_Scale_Rancilio_Tool", ITEM_TYPE_PROGRAM)
-    hide_rancilio.RunCode()
-    hide_rancilio.WaitFinished()
+    run_visual(RDK, "Hide_Mazzer_Scale_Rancilio_Tool")
 
     tls.student_tool_attach()
 
@@ -312,10 +306,7 @@ def run_task_l(UR5, tls, RDK):
     # Releases the tool, leaving it locked in the group head, and shows it there in place of the attached one
     tls.student_tool_detach()
     attached_tool.setVisible(False, False)
-
-    show_rancilio_locked = RDK.Item("Show_Rancilio_Rancilio_Tool_Rotated", ITEM_TYPE_PROGRAM)
-    show_rancilio_locked.RunCode()
-    show_rancilio_locked.WaitFinished()
+    run_visual(RDK, "Show_Rancilio_Rancilio_Tool_Rotated")
 
     # Backs straight off the tool along the handle and rises clear of the rancilio, ready for task o
     UR5.MoveL(retreat_back_pose, True)
@@ -335,9 +326,15 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
+
+    # Picks up the rancilio tool, in the full run it is already held, carried over from task k
+    tls.rancilio_tool_attach_l_ati()
 
     run_task_l(UR5, tls, RDK)
 
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    # Sends the robot home, in the full run task o carries straight on from above the rancilio
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

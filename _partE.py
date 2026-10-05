@@ -3,7 +3,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import get_point, build_pose, rotate_about_tip, solve_frame_rotation, compute_waypoints
+from _common import get_point, build_pose, rotate_about_tip, solve_frame_rotation, compute_waypoints, run_visual, enable_step_mode
 
 # locking torked out
 
@@ -108,12 +108,8 @@ def run_task_e(UR5, tls, RDK):
     ])
     # UR5.MoveL(waypoints["backoff"], True)
     # UR5.MoveL(task_a_pose, True)
-
-    # Starts the robot at home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
     
-    # Picks up the mazzer tool from the tool stand
-    # tls.mazzer_tool_attach_l_ati()
+    # The mazzer tool is already held, carried over from task d
 
     UR5.MoveJ(staging_intermediate_pose, True)
 
@@ -122,14 +118,13 @@ def run_task_e(UR5, tls, RDK):
     UR5.MoveL(unlock_pose, True)
     UR5.MoveL(slide_pose, True)
     UR5.MoveL(press_pose, True)
+    run_visual(RDK, "Show_Mazzer_Scale_Lock")
     UR5.MoveL(locked_retreat_pose, True)
 
     UR5.MoveJ(staging_intermediate_pose, True)
 
+    # Returns the mazzer tool to the tool stand
     tls.mazzer_tool_detach_l_ati()
-
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":
@@ -144,8 +139,22 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
+
+    # Shows the rancilio tool sitting on the mazzer scale and takes it off the tool stand, as task a leaves it, with
+    # the scale unlocked, as task b leaves it. Simulation only
+    run_visual(RDK, "Show_Mazzer_Scale_Rancilio_Tool")
+    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
+    run_visual(RDK, "Show_Mazzer_Scale_Read")
+
+    # Picks up the mazzer tool, in the full run it is already held, carried over from task d
+    tls.mazzer_tool_attach_l_ati()
 
     run_task_e(UR5, tls, RDK)
 
-
+    # Sends the robot home, in the full run task f carries straight on from the tool stand
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

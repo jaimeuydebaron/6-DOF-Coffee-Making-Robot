@@ -3,7 +3,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import get_point, build_pose, solve_frame_rotation, rotate_about_tip, compute_waypoints
+from _common import get_point, build_pose, solve_frame_rotation, rotate_about_tip, compute_waypoints, run_visual, enable_step_mode
 
 # Needs to come in at a slight angle, go in slightly higher, then drop it in
 
@@ -134,18 +134,12 @@ def run_task_a(UR5, tls, RDK):
     # Shows the ghost object left behind in the tool's place
     attached_tool = RDK.Item("Rancilio_Tool_(UR5)", ITEM_TYPE_TOOL)
     attached_tool.setVisible(False, False)
-
-    show_rancilio = RDK.Item("Show_Mazzer_Scale_Rancilio_Tool", ITEM_TYPE_PROGRAM)
-    show_rancilio.RunCode()
-    show_rancilio.WaitFinished()
+    run_visual(RDK, "Show_Mazzer_Scale_Rancilio_Tool")
 
     # Retreats to an intermediate pose
     UR5.MoveL(retreat_intermediate_pose_1, True)
     UR5.MoveL(retreat_intermediate_pose_2, True)
     UR5.MoveJ(tool_change_intermediate_pose, True)
-
-    # Sends the robot home, comment out if doing full run
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":
@@ -160,6 +154,13 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
-    # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
+    RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
     run_task_a(UR5, tls, RDK)
+
+    # Sends the robot home, in the full run task b carries straight on from here
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

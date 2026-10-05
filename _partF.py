@@ -4,7 +4,7 @@ from robodk.robomath import *
 from time import sleep
 import tools
 from _partA import tilt_tool_pose
-from _common import compute_waypoints
+from _common import compute_waypoints, run_visual, enable_step_mode
 
 
 def compute_task_f_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, extra_tilt_deg=0, hover_mm=0):
@@ -76,14 +76,6 @@ def run_task_f(UR5, tls, RDK):
     # UR5.MoveL(waypoints["backoff"], True)
     # UR5.MoveL(task_a_pose, True)
 
-    # Shows the rancilio tool sitting on the mazzer scale, left there by task a
-    show_rancilio = RDK.Item("Show_Mazzer_Scale_Rancilio_Tool", ITEM_TYPE_PROGRAM)
-    show_rancilio.RunCode()
-    show_rancilio.WaitFinished()
-
-    # Starts the robot at home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-
     # Moves in to where the rancilio tool is sitting on the scale
     UR5.MoveJ(approach_intermediate_pose_1, True)
     UR5.MoveJ(approach_intermediate_pose_2, True)
@@ -93,20 +85,13 @@ def run_task_f(UR5, tls, RDK):
     # Grabs the tool, hides the ghost object, and shows it attached to the robot instead
     attached_tool = RDK.Item("Rancilio_Tool_(UR5)", ITEM_TYPE_TOOL)
     attached_tool.setVisible(True, False)
-
-    hide_rancilio = RDK.Item("Hide_Mazzer_Scale_Rancilio_Tool", ITEM_TYPE_PROGRAM)
-    hide_rancilio.RunCode()
-    hide_rancilio.WaitFinished()
+    run_visual(RDK, "Hide_Mazzer_Scale_Rancilio_Tool")
 
     tls.student_tool_attach()
 
     # Lifts straight up to the hover pose, keeping the tilt, now holding the tool
     UR5.MoveL(task_f_hover_pose, True)
     UR5.MoveL(retreat_intermediate_pose_1, True)
-
-    # # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-
 
 
 if __name__ == "__main__":
@@ -121,6 +106,19 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
+    # Shows the rancilio tool sitting on the mazzer scale and takes it off the tool stand, as task a leaves it.
+    # Simulation only
+    run_visual(RDK, "Show_Mazzer_Scale_Rancilio_Tool")
+    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
+
     run_task_f(UR5, tls, RDK)
+
+    # Returns the rancilio tool and sends the robot home, in the full run task g carries on still holding it
+    tls.rancilio_tool_detach_l_ati()
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

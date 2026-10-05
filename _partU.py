@@ -5,8 +5,8 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import run_visual
-from _partT import compute_task_t_pose, clean_on_brush, BRISTLE_BRUSH
+from _common import run_visual, enable_step_mode
+from _partT import compute_task_t_pose, clean_on_brush, BRISTLE_BRUSH, approach_intermediate_pose_2
 
 
 def compute_task_u_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, hover_mm=0):
@@ -41,9 +41,6 @@ def run_task_u(UR5, tls, RDK):
     # Lowers onto the bristle brush, presses to actuate the cleaner, then lifts clear
     clean_on_brush(UR5, brush_pose, pressed_pose, hover_pose, clean_time_s)
 
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-
 
 if __name__ == "__main__":
     RDK = Robolink()
@@ -57,11 +54,23 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
-    # Puts the rancilio tool in the group head and takes it off the tool stand, as it would be after task l.
-    # Simulation only
-    run_visual(RDK, "Show_Rancilio_Rancilio_Tool_Rotated")
-    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
+    # Shows the cup on the rancilio scale, where it stays until task r. Simulation only
+    run_visual(RDK, "Show_Rancilio_Scale_Cup")
+
+    # Picks up the rancilio tool, in the full run it is already held, carried over from task t
+    tls.rancilio_tool_attach_l_ati()
+
+    # Goes to above the silicone brush, where task t finishes and this task starts from
+    UR5.MoveJ(approach_intermediate_pose_2, True)
 
     run_task_u(UR5, tls, RDK)
+
+    # Returns the rancilio tool and sends the robot home, in the full run task v carries on still holding it
+    tls.rancilio_tool_detach_l_ati()
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

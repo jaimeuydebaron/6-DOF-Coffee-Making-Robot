@@ -8,7 +8,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import run_visual
+from _common import run_visual, enable_step_mode
 from _partL import compute_rancilio_pose, compute_task_l_pose, compute_task_l_twist_steps
 
 
@@ -105,9 +105,6 @@ def run_task_s(UR5, tls, RDK):
     UR5.MoveL(task_s_approach_pose, True)
     UR5.MoveL(front_of_group_head_pose, True)
 
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-
 
 if __name__ == "__main__":
     RDK = Robolink()
@@ -121,11 +118,20 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
-    # Puts the rancilio tool in the group head and takes it off the tool stand, as it would be after task l.
-    # Simulation only
+    # Shows what tasks l and n leave behind, the rancilio tool in the group head, off the tool stand, and the cup on
+    # the scale pan. Simulation only
     run_visual(RDK, "Show_Rancilio_Rancilio_Tool_Rotated")
     RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
+    run_visual(RDK, "Show_Rancilio_Scale_Cup")
 
     run_task_s(UR5, tls, RDK)
+
+    # Returns the rancilio tool and sends the robot home, in the full run task t carries on still holding it
+    tls.rancilio_tool_detach_l_ati()
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

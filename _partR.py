@@ -7,7 +7,7 @@ from robodk.robomath import *
 from time import sleep
 import math
 import tools
-from _common import get_point, build_pose, compute_waypoints, run_visual
+from _common import get_point, build_pose, compute_waypoints, run_visual, enable_step_mode
 from _partN import compute_rancilio_scale_pose, compute_cup_tool_offset
 
 
@@ -222,9 +222,6 @@ def run_task_r(UR5, tls, RDK):
     tls.cup_tool_shut_ur5()
     tls.cup_tool_detach_l_ati()
 
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-
 
 if __name__ == "__main__":
     RDK = Robolink()
@@ -238,9 +235,16 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
     # Shows the cup on the rancilio scale, as it would be after task q. Simulation only
     run_visual(RDK, "Show_Rancilio_Scale_Cup")
 
     run_task_r(UR5, tls, RDK)
+
+    # Sends the robot home, the same as the last step of the full run
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

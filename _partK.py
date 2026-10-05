@@ -4,7 +4,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import get_point, build_pose, solve_frame_rotation, compute_waypoints
+from _common import get_point, build_pose, solve_frame_rotation, compute_waypoints, enable_step_mode
 
 
 def compute_puq_pose(fixture_fine_tune_mm):
@@ -150,9 +150,6 @@ def run_task_k(UR5, tls, RDK):
 
     UR5.MoveL(pre_insert_intermediate_pose, True)
 
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-
 
 if __name__ == "__main__":
     RDK = Robolink()
@@ -166,8 +163,17 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
+
+    # Picks up the rancilio tool, in the full run it is already held, carried over from task j
+    tls.rancilio_tool_attach_l_ati()
 
     run_task_k(UR5, tls, RDK)
 
-
+    # Returns the rancilio tool and sends the robot home, in the full run task l carries on still holding it
+    tls.rancilio_tool_detach_l_ati()
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

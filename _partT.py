@@ -5,7 +5,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import get_point, build_pose, solve_frame_rotation, run_visual
+from _common import get_point, build_pose, solve_frame_rotation, run_visual, enable_step_mode
 
 
 # Brushes on the rancilio tool cleaner, silicone for task t and bristle for task u
@@ -90,7 +90,7 @@ def run_task_t(UR5, tls, RDK):
     #   x: shifts along the cleaner's local x
     #   y: shifts along the cleaner's local y
     #   z: raises (+) or lowers (-) the basket over the brushes
-    fixture_fine_tune_mm = (0, 0, -1)
+    fixture_fine_tune_mm = (0, 0, 0)
 
     # approach_angle_adjust_deg = (rx, ry, rz) in degrees
     # Rotates the tool about its own x, y, z axes (x, then y, then z) once it is lined up with the brush.
@@ -123,15 +123,12 @@ def run_task_t(UR5, tls, RDK):
 
     # Swings over from where task s finishes through the jogged poses to line the basket up above the silicone
     # brush. The basket rolls over on the way, from facing up into the group head to facing down onto the brush
-    # UR5.MoveJ(approach_intermediate_pose_1, True)
-    # UR5.MoveJ(approach_intermediate_pose_3, True)
+    UR5.MoveJ(approach_intermediate_pose_1, True)
+    UR5.MoveJ(approach_intermediate_pose_3, True)
     UR5.MoveJ(approach_intermediate_pose_2, True)
 
     # # Cleans on the silicone brush
     clean_on_brush(UR5, brush_pose, pressed_pose, hover_pose, clean_time_s)
-
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":
@@ -146,11 +143,20 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
-    # Puts the rancilio tool in the group head and takes it off the tool stand, as it would be after task l.
-    # Simulation only
-    run_visual(RDK, "Show_Rancilio_Rancilio_Tool_Rotated")
-    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
+    # Shows the cup on the rancilio scale, where it stays until task r. Simulation only
+    run_visual(RDK, "Show_Rancilio_Scale_Cup")
+
+    # Picks up the rancilio tool, in the full run it is already held, carried over from task s
+    tls.rancilio_tool_attach_l_ati()
 
     run_task_t(UR5, tls, RDK)
+
+    # Returns the rancilio tool and sends the robot home, in the full run task u carries on still holding it
+    tls.rancilio_tool_detach_l_ati()
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

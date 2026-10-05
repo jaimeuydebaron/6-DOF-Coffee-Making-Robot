@@ -7,7 +7,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import compute_waypoints, run_visual
+from _common import compute_waypoints, run_visual, enable_step_mode
 from _partO import (
     compute_task_o_poses,
     approach_intermediate_pose_1, approach_intermediate_pose_2, approach_intermediate_pose_3,
@@ -83,8 +83,7 @@ def run_task_q(UR5, tls, RDK):
     UR5.setPoseFrame(RDK.Item("UR5_Base", ITEM_TYPE_FRAME))
     UR5.setTool(RDK.Item("Master_Tool_(UR5)", ITEM_TYPE_TOOL))
 
-    # The mazzer tool is already held, carried over from task p, uncomment this only to test part q on its own
-    # tls.mazzer_tool_attach_l_ati()
+    # The mazzer tool is already held, carried over from task p
 
     # Moves in through part o's jogged pose and this part's own, touches the lever, slides it, then presses it down to lock the scale
     UR5.MoveJ(approach_intermediate_pose_3, True)
@@ -98,9 +97,6 @@ def run_task_q(UR5, tls, RDK):
     UR5.MoveL(retreat_pose, True)
     UR5.MoveJ(approach_intermediate_pose_3, True)
     tls.mazzer_tool_detach_l_ati()
-
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":
@@ -116,10 +112,22 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Resets the simulation, then shows what parts l and n leave behind, the rancilio tool in the group head and
-    # the cup on the scale pan. Simulation only, comment these out on the real robot
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # run_visual(RDK, "Reset_Simulation_L")
+
+    # Shows what tasks l and n leave behind, the rancilio tool in the group head, off the tool stand, and the cup on
+    # the scale pan. Simulation only
     run_visual(RDK, "Show_Rancilio_Rancilio_Tool_Rotated")
+    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
     run_visual(RDK, "Show_Rancilio_Scale_Cup")
+    run_visual(RDK, "Show_Rancilio_Scale_Read")
+
+    # Picks up the mazzer tool, in the full run it is already held, carried over from task p
+    tls.mazzer_tool_attach_l_ati()
 
     run_task_q(UR5, tls, RDK)
+
+    # Sends the robot home, in the full run task s carries straight on from the tool stand
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

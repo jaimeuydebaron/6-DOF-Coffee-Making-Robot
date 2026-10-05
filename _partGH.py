@@ -3,7 +3,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import get_point, build_pose, compute_waypoints, solve_frame_rotation, rotate_about_tip
+from _common import get_point, build_pose, compute_waypoints, solve_frame_rotation, rotate_about_tip, run_visual, enable_step_mode
 
 # needs to come out not upward but outward, needs to be angled slightly upward
 
@@ -80,7 +80,7 @@ def run_task_g(UR5, tls, RDK):
     #   y: shifts along the wdt's local y
     #   z: shifts along the wdt's local z
     # Use it when the tool misses the drill hole in the plate centre, then check which way it needs to move.
-    fixture_fine_tune_mm = (8, 0, 3)
+    fixture_fine_tune_mm = (8, 0, 7)
 
     # approach_angle_adjust_deg = (rx, ry, rz) in degrees
     # Rotates the tool about its own x, y, z axes (x, then y, then z) at the placement pose.
@@ -95,7 +95,7 @@ def run_task_g(UR5, tls, RDK):
     # ball bearing point (point 54) so it stays where it is and the rest of the tool swings around it.
     # Applied after approach_angle_adjust_deg. Positive = leans further, negative = reduces the tilt
     # (-1.7 gives no tilt). Note the cup centre is about 120 mm from the pivot, so it moves about 2 mm per degree.
-    extra_tilt_deg = 2
+    extra_tilt_deg = 0
 
     # The jogged joint poses (away_general_point2, wdt_approach_joints, wdt_pre_drop_joints) are NOT affected by
     # the settings above. wdt_pre_drop_joints is the standoff the tool moves in from before the final MoveL to
@@ -130,9 +130,7 @@ def run_task_g(UR5, tls, RDK):
 
     attached_tool = RDK.Item("Rancilio_Tool_(UR5)", ITEM_TYPE_TOOL)
     attached_tool.setVisible(False, False)
-
-    ghost_tool = RDK.Item("Rancilio_Tool_(WDT)", ITEM_TYPE_OBJECT)
-    ghost_tool.setVisible(True)
+    run_visual(RDK, "Show_WDT_Rancilio_Tool")
 
     UR5.MoveL(retreat_intermediate_pose_1, True)
 
@@ -157,8 +155,13 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
+    # Picks up the rancilio tool, in the full run it is already held, carried over from task f
+    tls.rancilio_tool_attach_l_ati()
+
     run_task_g(UR5, tls, RDK)
-
-

@@ -5,7 +5,7 @@ from robodk.robomath import *
 from time import sleep
 import math
 import tools
-from _common import get_point, build_pose, rotate_about_tip
+from _common import get_point, build_pose, rotate_about_tip, run_visual, enable_step_mode
 from _partGH import compute_wdt_pose
 
 
@@ -138,9 +138,6 @@ def run_task_i(UR5, tls, RDK):
     # Run once with collision detection on to catch an unreachable point partway round
     # check_orbit_reachable(UR5, orbit_steps)
 
-    # # Starts the robot at home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-
     # Picks up the mazzer tool from the tool stand
     tls.mazzer_tool_attach_l_ati()
 
@@ -156,9 +153,6 @@ def run_task_i(UR5, tls, RDK):
     UR5.MoveL(task_i_hover_pose, True)
     tls.mazzer_tool_detach_l_ati()
 
-    # # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-
 
 if __name__ == "__main__":
     RDK = Robolink()
@@ -172,9 +166,21 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
+
+    # Shows the rancilio tool sitting in the wdt and takes it off the tool stand, as tasks g and h leave it.
+    # Simulation only
+    run_visual(RDK, "Show_WDT_Rancilio_Tool")
+    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
+
+    # Starts at home, where tasks g and h finish
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
     run_task_i(UR5, tls, RDK)
 
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    # Sends the robot home, in the full run task j carries straight on from the tool stand
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

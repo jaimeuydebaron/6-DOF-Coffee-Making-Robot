@@ -6,6 +6,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
+from _common import run_visual, enable_step_mode
 from _partGH import (
     compute_task_g_pose,
     approach_intermediate_pose_1, wdt_approach_joints, wdt_pre_drop_joints,
@@ -32,7 +33,7 @@ def run_task_j(UR5, tls, RDK):
     #   x: shifts along the wdt's local x
     #   y: shifts along the wdt's local y
     #   z: shifts along the wdt's local z
-    fixture_fine_tune_mm = (8, 0, 3)
+    fixture_fine_tune_mm = (8, 0, 7)
 
     # approach_angle_adjust_deg = (rx, ry, rz) in degrees
     # Rotates the tool about its own x, y, z axes (x, then y, then z) at the grab pose.
@@ -42,7 +43,7 @@ def run_task_j(UR5, tls, RDK):
     # extra_tilt_deg
     # Extra lean added on top of the 1.7 degree stem angle (point 63), about the tool's own y, pivoting about the
     # ball bearing point (point 54). The tool is grabbed at the same angle it was placed at.
-    extra_tilt_deg = 2
+    extra_tilt_deg = 0
 
     # The jogged joint poses are shared with part g and NOT affected by the settings above. wdt_pre_drop_joints is
     # the standoff the gripper moves in from before the final straight move to the grab pose, so if you move the
@@ -50,9 +51,6 @@ def run_task_j(UR5, tls, RDK):
     # =============================================================================
 
     task_j_pose = compute_task_j_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, extra_tilt_deg)
-
-    # # Starts the robot at home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
     # Goes in the way part g left, out through the staging poses, to reach the wdt empty handed
     UR5.MoveJ(retreat_intermediate_pose_2, True)
@@ -67,9 +65,7 @@ def run_task_j(UR5, tls, RDK):
     # Grabs the tool, hides the ghost object in the wdt, and shows it attached to the robot instead
     attached_tool = RDK.Item("Rancilio_Tool_(UR5)", ITEM_TYPE_TOOL)
     attached_tool.setVisible(True, False)
-
-    ghost_tool = RDK.Item("Rancilio_Tool_(WDT)", ITEM_TYPE_OBJECT)
-    ghost_tool.setVisible(False)
+    run_visual(RDK, "Hide_WDT_Rancilio_Tool")
 
     tls.student_tool_attach()
 
@@ -78,9 +74,6 @@ def run_task_j(UR5, tls, RDK):
     UR5.MoveJ(wdt_approach_joints, True)
 
     tls.wdt_shut()
-
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":
@@ -95,7 +88,22 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
+
+    # Shows the rancilio tool sitting in the wdt and takes it off the tool stand, as tasks g and h leave it.
+    # Simulation only
+    run_visual(RDK, "Show_WDT_Rancilio_Tool")
+    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
+
+    # Starts at home, where tasks g and h finish
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
     run_task_j(UR5, tls, RDK)
 
+    # Returns the rancilio tool and sends the robot home, in the full run task k carries on still holding it
+    tls.rancilio_tool_detach_l_ati()
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

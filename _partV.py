@@ -5,7 +5,8 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import run_visual
+from _common import run_visual, enable_step_mode
+from _partT import approach_intermediate_pose_2
 from _partU import compute_task_u_pose
 
 
@@ -38,9 +39,6 @@ def run_task_v(UR5, tls, RDK):
     # and return the rancilio tool
     tls.rancilio_tool_detach_l_ati()
 
-    # Sends the robot home, the end of the whole run
-    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-
 
 if __name__ == "__main__":
     RDK = Robolink()
@@ -54,11 +52,23 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
+
+    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
+    enable_step_mode(UR5, tls)
+
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
-    # Puts the rancilio tool in the group head and takes it off the tool stand, as it would be after task l.
-    # Simulation only
-    run_visual(RDK, "Show_Rancilio_Rancilio_Tool_Rotated")
-    RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
+    # Shows the cup on the rancilio scale, where it stays until task r. Simulation only
+    run_visual(RDK, "Show_Rancilio_Scale_Cup")
+
+    # Picks up the rancilio tool, in the full run it is already held, carried over from task u
+    tls.rancilio_tool_attach_l_ati()
+
+    # Goes to above the silicone brush, the nearest jogged pose to above the bristle brush, where task u finishes
+    # and this task starts from
+    UR5.MoveJ(approach_intermediate_pose_2, True)
 
     run_task_v(UR5, tls, RDK)
+
+    # Sends the robot home, in the full run task r carries straight on from the tool stand
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
