@@ -81,10 +81,6 @@ def check_orbit_reachable(UR5, orbit_steps):
         print(f"[task i] Orbit step {i} of {len(orbit_steps)}, {status}")
 
 
-# Jogged joint waypoint that carries the mazzer tool clear of the wdt and the rancilio tool sitting in it
-# Jog this in the lab, leave as None to go straight to the hover pose
-approach_intermediate_pose = None
-
 
 def run_task_i(UR5, tls, RDK):
     # ==================== FINE TUNING (edit these in the lab) ====================
@@ -128,8 +124,8 @@ def run_task_i(UR5, tls, RDK):
     # Bigger = more clearance, smaller = a shorter drop.
     align_hover_mm = 40
 
-    # The joint pose approach_intermediate_pose is NOT affected by the settings above, jog it if the arm hits the
-    # wdt or the rancilio tool sitting in it on the way to the hover pose.
+    # There are no jogged joint poses in this part, the joint move goes straight to the hover pose. If the arm hits
+    # the wdt or the rancilio tool sitting in it on the way, jog a waypoint and add a MoveJ to it before the hover pose.
     # =============================================================================
 
     # Computes the pose lined up above the hole, the pose with the tip in the hole, and the points round the orbit
@@ -142,15 +138,13 @@ def run_task_i(UR5, tls, RDK):
     # Run once with collision detection on to catch an unreachable point partway round
     # check_orbit_reachable(UR5, orbit_steps)
 
-    # Starts the robot at home
-    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    # # Starts the robot at home
+    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
     # Picks up the mazzer tool from the tool stand
     tls.mazzer_tool_attach_l_ati()
 
     # Moves in above the rotor hole, then drops the tip into it
-    if approach_intermediate_pose is not None:
-        UR5.MoveJ(approach_intermediate_pose, True)
     UR5.MoveJ(task_i_hover_pose, True)
     UR5.MoveL(task_i_pose, True)
 
@@ -160,12 +154,10 @@ def run_task_i(UR5, tls, RDK):
 
     # Lifts the tip out of the hole and retreats, then returns the mazzer tool
     UR5.MoveL(task_i_hover_pose, True)
-    if approach_intermediate_pose is not None:
-        UR5.MoveJ(approach_intermediate_pose, True)
     tls.mazzer_tool_detach_l_ati()
 
-    # Sends the robot home
-    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    # # Sends the robot home
+    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
 
 if __name__ == "__main__":

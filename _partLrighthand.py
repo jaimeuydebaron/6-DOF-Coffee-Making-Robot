@@ -1,18 +1,16 @@
-# _partL.py
+# _partLrighthand.py
 # Task l, remove the rancilio tool from the puq fixture and insert it into the rancilio group head
-# This sets the tool down on the mazzer scale, runs tasks m and n to dispense the cup and place it on the rancilio
-# scale, since on the real cart the tool in the group head is in the way of placing the cup, then picks the tool
-# back up from the scale and inserts it into the group head. All of it is in the left hand configuration
+# The puq and the group head can not both be reached holding the tool in one hand configuration, so this sets the
+# tool down on the mazzer scale in the left hand configuration, switches to the right hand configuration, picks
+# it back up from the scale, then inserts it into the group head
 from robodk.robolink import *
 from robodk.robomath import *
 import tools
-from _common import get_point, build_pose, solve_frame_rotation, solve_joints_near
+from _common import get_point, build_pose, solve_frame_rotation, compute_waypoints
 import _partK as part_k
 import _partF as part_f
 import _partA as part_a
-import _partM as part_m
-import _partN as part_n
-from _partF import compute_task_f_pose, compute_waypoints
+from _partF import compute_task_f_pose
 
 
 def compute_rancilio_pose(fixture_fine_tune_mm):
@@ -89,17 +87,31 @@ def compute_task_l_twist_steps(start_pose, fixture_fine_tune_mm, twist_deg, num_
 
     return steps
 
+
+# Jogged joint waypoint that carries the tool from the puq across towards the mazzer scale, left hand
 left_scale_approach_intermediate_pose_1 = [96.730000, -98.710000, 145.110000, -46.390000, 6.730000, 140.000000]
 
-# Left hand arm configuration hint for the joint move in front of the group head, with the elbow and the wrist up
-# (J5 positive), the same way round as the rest of task l and tasks m and n. It only picks which of the arm's
-# solutions is used, it does not change where the tool goes
-GROUP_HEAD_CONFIG_HINT = [11, -100, 144, -44, 101, 140]
+# Jogged joint waypoints for the right hand configuration's way in to the mazzer scale to pick the tool back up
+right_scale_approach_intermediate_pose_1 = [-5.561158, -102.188031, -134.759147, -121.113159, -34.300755, 138.409574]
+right_scale_approach_intermediate_pose_2 = [-5.561158, -85.197936, -124.911755, -147.950646, -34.300755, 138.409574]
+right_scale_approach_intermediate_pose_3 = [-1.569378, -105.311020, -130.192157, -122.331529, -30.311896, 138.142915]
+
+# Jogged joint waypoint that leaves the mazzer scale holding the tool
+right_scale_retreat_intermediate_pose = [-23.301968, -91.463351, -140.250302, -126.899999, -52.034415, 139.159139]
+
+# Jogged joint waypoint that carries the tool across to the rancilio, taken to just before lining up below the group head
+rancilio_approach_intermediate_pose_1 = [-75.133129, -80.772111, -149.687599, -128.438406, -83.856144, 139.897662]
+rancilio_approach_intermediate_pose_2 = [-105.130000, -80.770000, -149.690000, -128.440000, -83.860000, 139.900000]
+
+# Jogged joint waypoints that leave the rancilio once the tool is locked in, the second is the tool change pose
+# that part m starts from
+rancilio_retreat_intermediate_pose = [-132.415649, -98.445562, -122.970457, -135.103261, -102.355981, 140.745697]
+right_tool_change_intermediate_pose = [-91.989698, -76.115205, -110.455656, -83.428027, 90.001558, -236.989611]
 
 
 def run_task_l(UR5, tls, RDK):
-    """ Stays in the left hand configuration throughout, and ends empty handed, risen clear of the rancilio, with the tool locked in
-    the group head and the cup on the rancilio scale """
+    """ Does not return the robot home, ends empty handed at the right hand tool change pose with the tool
+    locked in the group head """
 
     # ==================== FINE TUNING (edit these in the lab) ====================
 
@@ -182,19 +194,10 @@ def run_task_l(UR5, tls, RDK):
     # How many points the twist is split into. More = smoother but slower, fewer = faster but jerkier.
     num_twist_steps = 9
 
-    # front_of_group_head_mm
-    # How far out in front of the rancilio (along its +x) the tool lines up, at the height of the approach pose,
-    # before sliding straight in under the group head. Coming down from above instead passes through the machine.
-    front_of_group_head_mm = 150
-
-    # retreat_back_mm, retreat_up_mm
-    # Once the tool is locked in and let go of, how far the robot backs straight off along the handle, out of the
-    # tool's coupling, and then how far it rises before going home.
-    retreat_back_mm = 60
-    retreat_up_mm = 100
-
-    # The jogged joint poses imported from parts k, f and a are NOT affected by the settings above. Jog them if
-    # the arm hits the puq, the mazzer or the wdt on the way across.
+    # All the jogged joint poses above (the right_scale_... poses, rancilio_approach_intermediate_pose,
+    # rancilio_retreat_intermediate_pose and right_tool_change_intermediate_pose), and the ones imported from
+    # parts k, f and a, are NOT affected by the settings above. Jog them if the arm hits the puq, the mazzer, the
+    # rancilio or the wdt on the way across.
     # =============================================================================
 
     # Computes the poses above and on the scale, for setting the tool down and picking it up again
@@ -213,15 +216,6 @@ def run_task_l(UR5, tls, RDK):
     twist_steps = compute_task_l_twist_steps(
         task_l_pose, fixture_fine_tune_mm, twist_deg, num_twist_steps, group_head_tilt_deg)
 
-    # The pose lined up in front of the rancilio, level with the approach pose, along the rancilio's +x
-    rancilio_pose = compute_rancilio_pose(fixture_fine_tune_mm)
-    out_front = [rancilio_pose[i, 0] * front_of_group_head_mm for i in range(2)]
-    front_of_group_head_pose = transl(out_front[0], out_front[1], 0) * task_l_approach_pose
-
-    # The poses backed off the locked tool, along the handle, then raised
-    retreat_back_pose = twist_steps[-1] * transl(0, 0, -retreat_back_mm)
-    retreat_up_pose = transl(0, 0, retreat_up_mm) * retreat_back_pose
-
     # Makes sure the poses below are read in the robot base frame with the master tool, as the assignment requires
     # The tool change routines leave the frame on the tool stand's frame until they finish, so a run that was cut
     # short, or a test that skips the attach, leaves every pose in this file measured from the wrong place
@@ -233,13 +227,13 @@ def run_task_l(UR5, tls, RDK):
 
     # Optional, builds extra waypoints from the final tilted pose instead of using align_hover_mm
     # Each offset is (name, (x, y, z) in mm, (rx, ry, rz) in degrees), applied in the tool's OWN frame,
-    # translation first then rotation. Each waypoint comes from task_a_pose on its own, they do not chain.
-    # For example, this backs the tool off 40 mm along its own z, keeping the tilt:
+    # translation first then rotation. Each waypoint comes from the locked pose on its own, they do not chain.
+    # For example, this backs the tool off 30 mm along its own z, keeping the tilt:
     waypoints = compute_waypoints(twist_steps[-1], offsets=[
         ("backoff", (0, 0, -30), (0, 0, 0)),
     ])
     # UR5.MoveL(waypoints["backoff"], True)
-    # UR5.MoveL(task_a_pose, True)
+    # UR5.MoveL(twist_steps[-1], True)
 
     # ---------- Left hand, takes the tool out of the puq and sets it down on the mazzer scale ----------
 
@@ -267,27 +261,18 @@ def run_task_l(UR5, tls, RDK):
     show_rancilio.RunCode()
     show_rancilio.WaitFinished()
 
-    # Retreats clear of the mazzer scale, then carries straight on into task m in the left hand configuration
+    # Retreats clear of the mazzer scale, then sends the robot home in the left hand configuration
     UR5.MoveJ(part_a.retreat_intermediate_pose_1, True)
     UR5.MoveL(part_a.retreat_intermediate_pose_2, True)
     UR5.MoveJ(part_a.tool_change_intermediate_pose, True)
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
-    # ---------- Pauses task l to run tasks m and n, while the tool is sitting on the mazzer scale ----------
-    # On the real cart the rancilio tool in the group head is in the way of placing the cup on the rancilio scale,
-    # so the cup is dispensed and placed now, before the tool goes into the group head
-    # Both run in the left hand configuration, carrying on from home_l without changing configuration, m ends with
-    # the mazzer tool back on the stand and n ends empty handed at the cup tool's approach pose on the tool stand
+    # ---------- Switches to the right hand configuration, and picks the tool up from the mazzer scale ----------
 
-    part_m.run_task_m(UR5, tls, RDK)
-    part_n.run_task_n(UR5, tls, RDK)
-
-    # ---------- Stays in the left hand configuration, and picks the tool up from the mazzer scale ----------
-
-    # Comes back in to the mazzer scale the way the tool was set down, and lowers onto it
-    UR5.MoveJ(part_a.approach_intermediate_pose_2, True)
-    UR5.MoveJ(part_a.approach_intermediate_pose_3, True)
-    UR5.MoveL(scale_hover_pose, True)
+    UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)
+    UR5.MoveJ(right_scale_approach_intermediate_pose_2, True)
+    UR5.MoveL(right_scale_approach_intermediate_pose_1, True)
+    UR5.MoveL(right_scale_approach_intermediate_pose_3, True)
     UR5.MoveL(scale_pose, True)
 
     # Grabs the tool, hides the ghost object, and shows it attached to the robot instead, the same way part f does
@@ -299,18 +284,18 @@ def run_task_l(UR5, tls, RDK):
 
     tls.student_tool_attach()
 
-    # Lifts straight up, now holding the tool, then backs out the same way it came in
+    # Lifts straight up, now holding the tool, then leaves the mazzer scale
     UR5.MoveL(scale_hover_pose, True)
-    UR5.MoveJ(part_a.approach_intermediate_pose_3, True)
-    UR5.MoveJ(part_a.approach_intermediate_pose_2, True)
+    UR5.MoveL(right_scale_retreat_intermediate_pose, True)
 
-    # ---------- Left hand, carries the tool across and inserts it into the group head ----------
+    # ---------- Right hand, carries the tool across and inserts it into the group head ----------
 
-    # Carries the tool across to line up in front of the rancilio, then slides straight in under the group head
-    UR5.MoveJ(solve_joints_near(UR5, front_of_group_head_pose, GROUP_HEAD_CONFIG_HINT), True)
-    UR5.MoveL(task_l_approach_pose, True)
+    # Carries the tool across to the rancilio
+    UR5.MoveJ(rancilio_approach_intermediate_pose_1, True)
+    UR5.MoveJ(rancilio_approach_intermediate_pose_2, True)
 
-    # Moves up until the basket meets the gasket
+    # Lines up below the group head, then moves up until the basket meets the gasket
+    UR5.MoveJ(task_l_approach_pose, True)
     UR5.MoveJ(task_l_pose, True)
 
     # Twists the tool to lock it into the group head
@@ -325,10 +310,9 @@ def run_task_l(UR5, tls, RDK):
     show_rancilio_locked.RunCode()
     show_rancilio_locked.WaitFinished()
 
-    # Backs straight off the tool along the handle and rises clear of the rancilio, ready for task o
-    UR5.MoveL(retreat_back_pose, True)
-    UR5.MoveL(retreat_up_pose, True)
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    # Retreats clear of the rancilio to the tool change pose that part m starts from
+    UR5.MoveJ(rancilio_retreat_intermediate_pose, True)
+    UR5.MoveJ(right_tool_change_intermediate_pose, True)
 
 
 if __name__ == "__main__":
@@ -344,10 +328,9 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Resets the simulation visuals, uncomment for a clean simulation start, leave it off on the real robot
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
     run_task_l(UR5, tls, RDK)
 
     # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    # UR5.MoveJ(RDK.Item("Home_R", ITEM_TYPE_TARGET), True)

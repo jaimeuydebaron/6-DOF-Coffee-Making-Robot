@@ -7,7 +7,7 @@ from robodk.robomath import *
 from time import sleep
 import tools
 from _partGH import (
-    compute_task_g_pose, run_task_g,
+    compute_task_g_pose,
     approach_intermediate_pose_1, wdt_approach_joints, wdt_pre_drop_joints,
     retreat_intermediate_pose_1, retreat_intermediate_pose_2,
 )
@@ -51,10 +51,8 @@ def run_task_j(UR5, tls, RDK):
 
     task_j_pose = compute_task_j_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, extra_tilt_deg)
 
-    # Starts the robot at home
-    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-
-    # run_task_g(UR5, tls, RDK)
+    # # Starts the robot at home
+    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
     # Goes in the way part g left, out through the staging poses, to reach the wdt empty handed
     UR5.MoveJ(retreat_intermediate_pose_2, True)

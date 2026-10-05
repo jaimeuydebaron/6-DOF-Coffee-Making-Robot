@@ -4,7 +4,7 @@ from robodk.robomath import *
 from time import sleep
 import tools
 import math
-from _common import get_point, build_pose, solve_joints_near
+from _common import get_point, build_pose
 
 
 def apply_rotation(R, point):
@@ -79,12 +79,10 @@ def compute_task_m_open_pose(fixture_fine_tune_mm):
     return T_world_target * T_tool_offset.inv()
 
 
-
-
-# Arm configuration hint for the joint move to the cup dispenser, left hand with the elbow and the wrist up (J5
-# positive), the same way round as home_l and task l, so the arm does not change configuration between tasks l, m
-# and n. It only picks which of the arm's solutions is used, it does not change where the tool goes
-CONFIG_HINT = [7, -90, 123, -34, 96, 90]
+# Joint config that clears the cup dispenser body on approach and retreat
+staging_intermediate_pose = [118.506308, -94.689040, 121.189746, -116.417060, -89.525329, -206.644986]
+approach_intermediate_pose_1 = [6.932440, -91.974178, 120.520913, -28.335085, 96.767328, 90.334583]
+approach_intermediate_pose_2 = [31.860000, -108.680000, 131.790000, -112.980000, -90.000000, -213.290000]
 
 
 def run_task_m(UR5, tls, RDK):
@@ -104,19 +102,10 @@ def run_task_m(UR5, tls, RDK):
     # open_fixture_fine_tune_mm = (x, y, z) in mm
     # Same as shut_fixture_fine_tune_mm, but for where the tool sits when the tab is open. The distance between
     # the shut and open positions is what flicks the tab, so nudging this changes how far the tab is pushed.
-    open_fixture_fine_tune_mm = (0, 0, 0)
+    open_fixture_fine_tune_mm = (0, 0, -2)
 
-    # clear_raise_mm
-    # How far straight above the shut tab position the tool enters and leaves from, along the tool's own x (up).
-    # It follows shut_fixture_fine_tune_mm, so it stays the same height above the tab if that is changed.
-    clear_raise_mm = 30
-
-    # transit_raise_mm
-    # How far straight above the clear pose (in the world z) the tool passes on its way between the tool stand and
-    # the cup dispenser, so it swings over the rancilio and the tool stand rather than through them.
-    # 250 clears both, 150 clips the tool stand, 350 is too high to come straight down into the dispenser.
-    transit_raise_mm = 250
-
+    # The joint pose joints_intermediate_clear is a jogged pose used to enter and leave, it is NOT affected by
+    # the settings above. If you move either position a lot, re-jog it so the moves stay clear of the dispenser.
     # The one second waits between the moves are in the motion below, edit those to change how long the tab
     # stays open or shut.
     # =============================================================================
@@ -124,30 +113,24 @@ def run_task_m(UR5, tls, RDK):
     shut_pose = compute_task_m_shut_pose(shut_fixture_fine_tune_mm)
     open_pose = compute_task_m_open_pose(open_fixture_fine_tune_mm)
 
-    # The pose the tool enters and leaves from, straight above the shut tab, solved in the left hand configuration,
-    # the same way round as home_l and task l, so the arm does not change configuration between tasks l, m and n
-    clear_pose = shut_pose * transl(clear_raise_mm, 0, 0)
-    transit_pose = transl(0, 0, transit_raise_mm) * clear_pose
-
-    # Picks up the mazzer tool from the tool stand, in the left hand configuration
+    # Picks up the mazzer tool from the tool stand
     tls.mazzer_tool_attach_l_ati()
 
-    # Swings over the rancilio up high, then comes straight down above the tab
-    UR5.MoveJ(solve_joints_near(UR5, transit_pose, CONFIG_HINT), True)
-    UR5.MoveL(clear_pose, True)
+    UR5.MoveJ(staging_intermediate_pose, True)
 
     # Cup drop motion, flicks the tab open then back to shut to release a cup
+    UR5.MoveJ(approach_intermediate_pose_2, True)
+    UR5.MoveJ(approach_intermediate_pose_1, True)
     UR5.MoveJ(shut_pose, True)
-    sleep(1)
+    # sleep(1)
     UR5.MoveJ(open_pose, True)
-    sleep(1)
+    # sleep(1)
     UR5.MoveJ(shut_pose, True)
 
-    # Retreats clear of the fixture before detaching the tool
-    UR5.MoveJ(clear_pose, True)
+    # # Retreats clear of the fixture before detaching the tool
+    UR5.MoveJ(approach_intermediate_pose_1, True)
+    UR5.MoveJ(approach_intermediate_pose_2, True)
 
-    # Rises straight back up and swings back over the rancilio to return the mazzer tool
-    UR5.MoveL(transit_pose, True)
     tls.mazzer_tool_detach_l_ati()
 
 
@@ -163,9 +146,7 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
-    RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
+    # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
     run_task_m(UR5, tls, RDK)
 
-    # Sends the robot home
-    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

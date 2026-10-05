@@ -1,5 +1,6 @@
 # _common.py
-# Shared pose and geometry helpers used across _partA.py through _partM.py
+# Shared pose and geometry helpers used across _partA.py through _partV.py
+from robodk.robolink import ITEM_TYPE_PROGRAM
 from robodk.robomath import *
 from __points import POINTS
 import math
@@ -108,10 +109,6 @@ def compute_mazzer_pose():
     return mazzer_pose
 
 
-# Home_L's joint angles, used as the hint for joint moves made in the left hand configuration
-LEFT_CONFIG_HINT = [180.0, -90.0, 90.0, -90.0, -90.0, -90.0]
-
-
 def solve_joints_near(UR5, pose, config_hint):
     # Solves the joint angles that put the master tool at pose, choosing the solution closest to config_hint
     # Only solutions with the shoulder up and the elbow bent the same way as the hint are kept, so a left hand
@@ -131,3 +128,11 @@ def solve_joints_near(UR5, pose, config_hint):
     if best is None:
         raise ValueError("No joint solution for this pose in the hinted configuration, it may be out of reach")
     return best
+
+
+def run_visual(RDK, program_name):
+    # Runs one of the station's visual programs, such as showing or hiding a ghost tool or cup, and waits for it
+    # to finish. These only change the simulation, they do not move the robot
+    program = RDK.Item(program_name, ITEM_TYPE_PROGRAM)
+    program.RunCode()
+    program.WaitFinished()

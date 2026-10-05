@@ -122,7 +122,7 @@ def run_task_b(UR5, tls, RDK):
     UR5.MoveL(unlocked_retreat_pose, True)
     UR5.MoveJ(staging_intermediate_pose, True)
 
-    # Returns the mazzer tool
+    # # Returns the mazzer tool, part c picks it up again from home
     # tls.mazzer_tool_detach_l_ati()
 
     # Sends the robot home

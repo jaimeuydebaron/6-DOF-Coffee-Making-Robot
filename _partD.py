@@ -192,7 +192,7 @@ def run_task_d(UR5, tls, RDK):
     # use_scale
     # True on the lab network so the dose is checked against the real scale and the pull repeats until the
     # target is reached. False pulls the lever once with no scale reading, for simulation.
-    use_scale = True
+    use_scale = False
 
     # max_pulls
     # Only matters when use_scale is True. The most pulls allowed before it gives up, so a broken scale
@@ -229,11 +229,11 @@ def run_task_d(UR5, tls, RDK):
     # Run once with collision detection on to catch an unreachable point partway through the sweep
     # check_arc_reachable(UR5, pull_steps)
 
-    # Starts the robot at home
+    # # Starts the robot at home
     # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
 
-    # Picks up the mazzer tool from the tool stand
-    tls.mazzer_tool_attach_l_ati()
+    # # Picks up the mazzer tool from the tool stand
+    # tls.mazzer_tool_attach_l_ati()
 
     UR5.MoveJ(staging_intermediate_pose, True)
 
@@ -261,6 +261,8 @@ def run_task_d(UR5, tls, RDK):
     UR5.MoveJ(approach_intermediate_pose_3, True)
     UR5.MoveJ(approach_intermediate_pose_2, True)
     UR5.MoveJ(approach_intermediate_pose_1, True)
+
+    UR5.MoveJ(staging_intermediate_pose, True)
 
     # Returns the mazzer tool to the tool stand
     # tls.mazzer_tool_detach_l_ati()

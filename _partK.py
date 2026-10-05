@@ -65,18 +65,6 @@ def compute_task_k_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, extra_t
     return task_k_pose
 
 
-def compute_task_k_exit_pose(task_k_pose, exit_distance_mm):
-    # Backs the tool out of the clamp along its own z axis, but flattened onto the horizontal plane. The tool is
-    # tilted by the stem angle, so backing straight out along its own z would also change its height and torque
-    # the basket in the clamp. This keeps the height and the tilt exactly as they were at the placement pose
-    back_x = -task_k_pose[0, 2]
-    back_y = -task_k_pose[1, 2]
-    horizontal_length = (back_x ** 2 + back_y ** 2) ** 0.5
-    shift_x = exit_distance_mm * back_x / horizontal_length
-    shift_y = exit_distance_mm * back_y / horizontal_length
-    return transl(shift_x, shift_y, 0) * task_k_pose
-
-
 # Jogged joint waypoint that carries the held rancilio tool from the wdt area across to the puq without
 # hitting either fixture. Jog this in the lab, leave as None to go straight to the approach pose
 approach_intermediate_pose_1 = [126.730000, -98.710000, 145.110000, -46.390000, 16.730000, 140.000000]
@@ -96,7 +84,7 @@ def run_task_k(UR5, tls, RDK):
     #   x: shifts along the puq's local x
     #   y: shifts along the puq's local y
     #   z: raises (+) or lowers (-) the tool, use this if the basket is too high or too low in the clamp
-    fixture_fine_tune_mm = (-2, 0, -2)
+    fixture_fine_tune_mm = (-2, 0, 0)
 
     # approach_angle_adjust_deg = (rx, ry, rz) in degrees
     # Rotates the tool about its own x, y, z axes (x, then y, then z) at the placement pose, before the tilt.
@@ -128,11 +116,6 @@ def run_task_k(UR5, tls, RDK):
     # How long to hold still in the clamp while the puq tamps, the assignment asks for 2 seconds.
     tamp_seconds = 2
 
-    # exit_distance_mm
-    # How far the tool backs out of the clamp after tamping, in a straight horizontal line, so its height does
-    # not change on the way out. If it moves the wrong way (into the puq instead of away), make it negative.
-    exit_distance_mm = 70
-
     # The joint pose approach_intermediate_pose is NOT affected by the settings above, jog it if the arm hits the
     # wdt or the puq on the way across.
     # =============================================================================
@@ -153,22 +136,19 @@ def run_task_k(UR5, tls, RDK):
     # UR5.MoveL(waypoints["backoff"], True)
     # UR5.MoveL(task_a_pose, True)
 
-    # # The rancilio tool is already held, carried over from task j
-    # if approach_intermediate_pose is not None:
-    #     UR5.MoveJ(approach_intermediate_pose, True)
-
+    # The rancilio tool is already held, carried over from task j
     # Moves in and places the rancilio tool into the puq clamp
-    # UR5.MoveJ(approach_intermediate_pose_1, True)
-    # UR5.MoveJ(approach_intermediate_pose_2, True)
+    UR5.MoveJ(approach_intermediate_pose_1, True)
+    UR5.MoveJ(approach_intermediate_pose_2, True)
     UR5.MoveJ(approach_intermediate_pose_3, True)
 
-    # UR5.MoveL(pre_insert_intermediate_pose, True)
+    UR5.MoveL(pre_insert_intermediate_pose, True)
     UR5.MoveL(task_k_pose, True)
 
-    # # # Holds the tool still while the puq tamps the grounds
-    # # sleep(tamp_seconds)
+    # # Holds the tool still while the puq tamps the grounds
+    sleep(tamp_seconds)
 
-    # UR5.MoveL(pre_insert_intermediate_pose, True)
+    UR5.MoveL(pre_insert_intermediate_pose, True)
 
     # Sends the robot home
     # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
