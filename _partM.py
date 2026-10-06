@@ -1,10 +1,9 @@
 # _partM.py
 from robodk.robolink import *
 from robodk.robomath import *
-from time import sleep
 import tools
 import math
-from _common import get_point, build_pose, run_visual, enable_step_mode
+from _common import get_point, build_pose, run_visual, enable_space_pause
 
 
 def apply_rotation(R, point):
@@ -15,7 +14,8 @@ def apply_rotation(R, point):
 
 
 def compute_cup_dispenser_pose():
-    # Gets the cup dispenser's origin and a reference point, in both world and local coordinates
+    # The cup dispenser's frame. Unlike the other fixtures it is tilted, so the known tilt is taken out first and
+    # the remaining spin about the world z is solved the same way as solve_frame_rotation
     origin_w = get_point(1)
     origin_l = get_point(16)
     ref_w = get_point(2)
@@ -47,16 +47,17 @@ def compute_cup_dispenser_pose():
 
 
 def compute_task_m_shut_pose(fixture_fine_tune_mm):
+    # Same steps as part a, on the cup dispenser's frame, with no angle adjust
     cup_dispenser_pose = compute_cup_dispenser_pose()
     cup_dispenser_pose = cup_dispenser_pose * transl(*fixture_fine_tune_mm)
 
-    # Sets the placement point as the tab in its shut position, with the tool orientation found by inspection
+    # The target is the tab in its shut position (point 19)
     point_local = get_point(19)
     axis_mapping = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
     T_fixture_placement = build_pose(axis_mapping, point_local)
     T_world_target = cup_dispenser_pose * T_fixture_placement
 
-    # Sets the mazzer tool's contact point
+    # The tool's contact point is its tip (point 51)
     tool_point_local = get_point(51)
     T_tool_offset = transl(*tool_point_local)
     task_m_shut_pose = T_world_target * T_tool_offset.inv()
@@ -68,7 +69,7 @@ def compute_task_m_open_pose(fixture_fine_tune_mm):
     cup_dispenser_pose = compute_cup_dispenser_pose()
     cup_dispenser_pose = cup_dispenser_pose * transl(*fixture_fine_tune_mm)
 
-    # Sets the placement point as the tab in its open position, with the tool orientation found by inspection
+    # Same as the shut pose, at the tab's open position (point 18)
     point_local = get_point(18)
     axis_mapping = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
     T_fixture_placement = build_pose(axis_mapping, point_local)
@@ -87,34 +88,20 @@ approach_intermediate_pose_2 = [31.860000, -108.680000, 131.790000, -112.980000,
 
 def run_task_m(UR5, tls, RDK):
     # ==================== FINE TUNING (edit these in the lab) ====================
-    # The tool moves between two tab positions, shut and open, and each has its own fine tune, so changing one
-    # does not affect the other. There is no angle setting in this part, the tool's orientation is fixed.
-    # The motion is: shut, then open, then shut again, which releases a cup.
+    # The tool flicks the tab from shut to open and back to shut, which releases a cup. Each position has its own
+    # fine tune, along the cup dispenser's own axes
 
-    # shut_fixture_fine_tune_mm = (x, y, z) in mm
-    # Moves WHERE the tool sits when the tab is shut, by shifting the assumed position of the cup dispenser
-    # along the cup dispenser's own axes. Used for the first and the last move, so it sets where the tab ends up.
-    #   x: shifts along the cup dispenser's local x
-    #   y: shifts along the cup dispenser's local y
-    #   z: shifts along the cup dispenser's local z, use this if the tool is pressing into or missing the tab
+    # Where the tool sits with the tab shut, the first and the last move
     shut_fixture_fine_tune_mm = (0, 0, -4)
 
-    # open_fixture_fine_tune_mm = (x, y, z) in mm
-    # Same as shut_fixture_fine_tune_mm, but for where the tool sits when the tab is open. The distance between
-    # the shut and open positions is what flicks the tab, so nudging this changes how far the tab is pushed.
+    # Where the tool sits with the tab open, sets how far the tab is pushed
     open_fixture_fine_tune_mm = (0, 0, 0)
-
-    # The joint pose joints_intermediate_clear is a jogged pose used to enter and leave, it is NOT affected by
-    # the settings above. If you move either position a lot, re-jog it so the moves stay clear of the dispenser.
-    # The one second waits between the moves are in the motion below, edit those to change how long the tab
-    # stays open or shut.
     # =============================================================================
 
     shut_pose = compute_task_m_shut_pose(shut_fixture_fine_tune_mm)
     open_pose = compute_task_m_open_pose(open_fixture_fine_tune_mm)
 
-    # Picks up the mazzer tool from the tool stand
-    tls.mazzer_tool_attach_l_ati()
+    # The mazzer tool is already held, carried over from task e
 
     UR5.MoveJ(staging_intermediate_pose, True)
 
@@ -122,19 +109,15 @@ def run_task_m(UR5, tls, RDK):
     UR5.MoveJ(approach_intermediate_pose_2, True)
     UR5.MoveJ(approach_intermediate_pose_1, True)
     UR5.MoveJ(shut_pose, True)
-    # sleep(1)
     UR5.MoveJ(open_pose, True)
     run_visual(RDK, "Show_Cup_Dispenser_Open")
-    # sleep(1)
     UR5.MoveJ(shut_pose, True)
     run_visual(RDK, "Show_Cup_Dispenser_Shut")
     run_visual(RDK, "Show_Cup_Dispenser_Cup")
 
-    # # Retreats clear of the fixture before detaching the tool
+    # Retreats clear of the fixture, task e returns the mazzer tool to the stand afterward
     UR5.MoveJ(approach_intermediate_pose_1, True)
     UR5.MoveJ(approach_intermediate_pose_2, True)
-
-    tls.mazzer_tool_detach_l_ati()
 
 
 if __name__ == "__main__":
@@ -150,17 +133,23 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
-    enable_step_mode(UR5, tls)
+    # Space in the terminal pauses and plays the run, for testing this task on its own
+    enable_space_pause(UR5, tls)
 
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
-    # Shows the rancilio tool set down on the mazzer scale and takes it off the tool stand, where task l leaves it
-    # while tasks m and n run. Simulation only
+    # Shows the rancilio tool sitting on the mazzer scale and takes it off the tool stand, as task a leaves it.
+    # Simulation only
     run_visual(RDK, "Show_Mazzer_Scale_Rancilio_Tool")
     RDK.Item("Rancilio_Tool_(ATI)", ITEM_TYPE_OBJECT).setVisible(False)
 
+    # Picks up the mazzer tool, in the full run it is already held, carried over from task e
+    tls.mazzer_tool_attach_l_ati()
+
     run_task_m(UR5, tls, RDK)
 
-    # Sends the robot home, in the full run task n carries straight on from the tool stand
+    # Returns the mazzer tool to the tool stand, in the full run task e does this
+    tls.mazzer_tool_detach_l_ati()
+
+    # Sends the robot home
     UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

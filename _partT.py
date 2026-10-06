@@ -5,7 +5,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import get_point, build_pose, solve_frame_rotation, run_visual, enable_step_mode
+from _common import get_point, build_pose, solve_frame_rotation, run_visual, enable_space_pause
 
 
 # Brushes on the rancilio tool cleaner, silicone for task t and bristle for task u
@@ -14,19 +14,16 @@ BRISTLE_BRUSH = 61
 
 
 def compute_tool_cleaner_pose(fixture_fine_tune_mm):
-    # Gets the rancilio tool cleaner's origin and a reference point, in both world and local coordinates
+    # The tool cleaner's frame, see part a for how this works
     origin_w = get_point(56)
     origin_l = get_point(58)
     ref_w = get_point(57)
     ref_l = get_point(59)
 
-    # Solves for how far the tool cleaner is rotated relative to the world frame
     theta = solve_frame_rotation(origin_w, origin_l, ref_w, ref_l)
 
-    # Builds the tool cleaner's pose in the robot's world frame
     tool_cleaner_pose = transl(*origin_w) * rotz(theta)
 
-    # Applies the fixture calibration correction
     tool_cleaner_pose = tool_cleaner_pose * transl(*fixture_fine_tune_mm)
 
     return tool_cleaner_pose
@@ -35,7 +32,7 @@ def compute_tool_cleaner_pose(fixture_fine_tune_mm):
 def compute_task_t_pose(brush_key, fixture_fine_tune_mm, approach_angle_adjust_deg, hover_mm=0):
     tool_cleaner_pose = compute_tool_cleaner_pose(fixture_fine_tune_mm)
 
-    # Sets the placement point as the top of the brush, with the tool orientation found by inspection
+    # The target is the top of the brush
     point_local = get_point(brush_key)
     axis_mapping = [
         [0, 0, -1],  # Tool x axis lines up with the fixture's negative z axis, the basket opening faces down
@@ -45,27 +42,25 @@ def compute_task_t_pose(brush_key, fixture_fine_tune_mm, approach_angle_adjust_d
     T_fixture_placement = build_pose(axis_mapping, point_local)
     T_world_target = tool_cleaner_pose * T_fixture_placement
 
-    # Sets the rancilio tool's contact point, the basket rim centre (point 55), and its mounting angle offset
+    # The tool's contact point is the basket rim centre (point 55)
     tool_point_local = get_point(55)
     T_tool_offset = rotz(-50 * pi/180) * transl(*tool_point_local)
     task_t_pose = T_world_target * T_tool_offset.inv()
 
-    # Applies the approach angle correction
+    # Angle adjust about the tcp
     angle_adjust = rotx(approach_angle_adjust_deg[0]*pi/180) \
                  * roty(approach_angle_adjust_deg[1]*pi/180) \
                  * rotz(approach_angle_adjust_deg[2]*pi/180)
     task_t_pose = task_t_pose * angle_adjust
 
-    # Lifts the pose straight up in the world frame by hover_mm, negative presses down into the brush. The world
-    # frame is used since the tcp is twisted from the tool
+    # Raised in the world frame by hover_mm, negative presses down into the brush
     task_t_pose = transl(0, 0, hover_mm) * task_t_pose
 
     return task_t_pose
 
 
 def clean_on_brush(UR5, brush_pose, pressed_pose, hover_pose, clean_time_s):
-    # Lowers the basket onto the brush, presses down to actuate the cleaner, holds for the cleaning time, then lifts
-    # back up clear of the brush
+    # Lowers the basket onto the brush, presses down to actuate the cleaner, holds, then lifts clear
     UR5.MoveL(brush_pose, True)
     UR5.MoveL(pressed_pose, True)
     sleep(clean_time_s)
@@ -84,36 +79,21 @@ def run_task_t(UR5, tls, RDK):
     # ==================== FINE TUNING (edit these in the lab) ====================
     # Part u cleans on the bristle brush the same way, so these MUST equal the values in run_task_u in _partU.py.
 
-    # fixture_fine_tune_mm = (x, y, z) in mm
-    # Moves WHERE the basket goes over the brushes, by shifting the assumed position of the tool cleaner along the
-    # cleaner's own axes. The tool keeps its angle and just moves as a whole.
-    #   x: shifts along the cleaner's local x
-    #   y: shifts along the cleaner's local y
-    #   z: raises (+) or lowers (-) the basket over the brushes
+    # Shifts where the basket goes over the brushes, along the cleaner's own axes
     fixture_fine_tune_mm = (0, 0, 0)
 
-    # approach_angle_adjust_deg = (rx, ry, rz) in degrees
-    # Rotates the tool about its own x, y, z axes (x, then y, then z) once it is lined up with the brush.
-    # It pivots about the tool's origin, NOT the basket rim centre, so changing it also moves where the basket goes.
+    # Rotates the tool about the tcp, so the basket moves too
     approach_angle_adjust_deg = (0, 0, 0)
 
-    # approach_height_mm
-    # How high above the brush the basket lines up before lowering onto it, and lifts back to after.
+    # Height above the brush where the basket lines up before lowering, and lifts back to
     approach_height_mm = 100
 
-    # press_mm
-    # How far the basket presses the brush down once on it. The target point is the basket rim, so the press is
-    # 10 mm more than the brush travel, letting the brush reach up into the bottom of the basket (basket depth is
-    # 29.3 mm).
+    # How far the basket presses the brush down. The target is the basket rim, so this is 10 mm more than the
+    # brush travel, letting the brush reach up into the 29.3 mm deep basket
     press_mm = 20
 
-    # clean_time_s
-    # How long the basket is held pressed on the brush, the assignment asks for 5 seconds.
+    # How long the basket is held pressed on the brush, the assignment asks for 5 seconds
     clean_time_s = 5
-
-    # The joint poses above (approach_intermediate_pose_1/2) are jogged joint angles, not affected by the settings
-    # here. approach_intermediate_pose_2 is where the straight move down onto the brush starts from, so if you move
-    # the fixture or change the angle or the approach height a lot, re-jog it.
     # =============================================================================
 
     # Computes the poses above the silicone brush, on it, and pressing it down
@@ -123,11 +103,11 @@ def run_task_t(UR5, tls, RDK):
 
     # Swings over from where task s finishes through the jogged poses to line the basket up above the silicone
     # brush. The basket rolls over on the way, from facing up into the group head to facing down onto the brush
-    UR5.MoveJ(approach_intermediate_pose_1, True)
+    UR5.MoveL(approach_intermediate_pose_1, True)
     UR5.MoveJ(approach_intermediate_pose_3, True)
     UR5.MoveJ(approach_intermediate_pose_2, True)
 
-    # # Cleans on the silicone brush
+    # Cleans on the silicone brush
     clean_on_brush(UR5, brush_pose, pressed_pose, hover_pose, clean_time_s)
 
 
@@ -144,8 +124,8 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
-    enable_step_mode(UR5, tls)
+    # Space in the terminal pauses and plays the run, for testing this task on its own
+    enable_space_pause(UR5, tls)
 
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
@@ -153,10 +133,10 @@ if __name__ == "__main__":
     run_visual(RDK, "Show_Rancilio_Scale_Cup")
 
     # Picks up the rancilio tool, in the full run it is already held, carried over from task s
-    tls.rancilio_tool_attach_l_ati()
+    # tls.rancilio_tool_attach_l_ati()
 
     run_task_t(UR5, tls, RDK)
 
-    # Returns the rancilio tool and sends the robot home, in the full run task u carries on still holding it
-    tls.rancilio_tool_detach_l_ati()
-    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    # # Returns the rancilio tool and sends the robot home, in the full run task u carries on still holding it
+    # tls.rancilio_tool_detach_l_ati()
+    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

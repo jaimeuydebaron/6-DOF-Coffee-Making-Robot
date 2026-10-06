@@ -3,9 +3,8 @@
 # Pulls back along the handle from above the bristle brush, then the tool stand's left hand detach routine takes over
 from robodk.robolink import *
 from robodk.robomath import *
-from time import sleep
 import tools
-from _common import run_visual, enable_step_mode
+from _common import run_visual, enable_space_pause
 from _partT import approach_intermediate_pose_2
 from _partU import compute_task_u_pose
 
@@ -53,8 +52,8 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
-    enable_step_mode(UR5, tls)
+    # Space in the terminal pauses and plays the run, for testing this task on its own
+    enable_space_pause(UR5, tls)
 
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 

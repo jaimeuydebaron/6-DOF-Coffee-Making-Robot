@@ -1,12 +1,18 @@
 # _common.py
 # Shared pose and geometry helpers used across _partA.py through _partV.py
-from robodk.robolink import ITEM_TYPE_PROGRAM
+from robodk.robolink import Robolink, StoppedError, ITEM_TYPE_PROGRAM, ITEM_TYPE_TOOL, RUNMODE_SIMULATE, \
+    COLLISION_ON, COLLISION_OFF
 from robodk.robomath import *
 from __points import POINTS
+import _thread
+import atexit
 import linecache
 import math
+import os
 import msvcrt
 import sys
+import threading
+import time
 
 
 def get_point(key):
@@ -28,19 +34,11 @@ def build_pose(rotation_columns, xyz):
 
 
 def compute_waypoints(target_pose, offsets):
-    # Builds a dict of named waypoints, each derived from target_pose by a
-    # translation and rotation offset in the tool's own local frame
-    # Offsets are given as name, x y z in mm, then rx ry rz in degrees
-    # Each waypoint is computed from target_pose independently, they do not chain off each other
-    # The translation is applied first, then the rotation in the order x, y, z
-    #
-    # Example, backs off 100 mm along the target's z to line up, then does a straight move in:
-    #   waypoints = compute_waypoints(target_pose, offsets=[
-    #       ("approach", (0, 0, -100), (0, 0, 0)),
-    #       ("angled",   (0, 0, -40),  (0, 10, 0)),
-    #   ])
+    # Builds named waypoints off target_pose. Each offset is (name, (x, y, z) mm, (rx, ry, rz) deg) in the tool's
+    # own frame, translation first, then rotation about x, y, z. Each comes from target_pose on its own, they
+    # do not chain
+    #   waypoints = compute_waypoints(target_pose, offsets=[("approach", (0, 0, -100), (0, 0, 0))])
     #   UR5.MoveL(waypoints["approach"], True)
-    #   UR5.MoveL(target_pose, True)
     waypoints = {}
 
     for name, translation_mm, angle_deg in offsets:
@@ -68,8 +66,7 @@ def cross_product(a, b):
 
 
 def rotate_about_tip(pose, tip_offset_mm, angle_adjust):
-    # Rotates a pose about the tool's tip rather than about the tcp, so the
-    # tip stays put in place while only the tool's facing direction changes
+    # Rotates a pose about the tool's tip instead of the tcp, so the tip stays put and only its facing changes
     return pose \
         * transl(*tip_offset_mm) \
         * angle_adjust \
@@ -77,8 +74,8 @@ def rotate_about_tip(pose, tip_offset_mm, angle_adjust):
 
 
 def solve_frame_rotation(origin_w, origin_l, ref_w, ref_l):
-    # Solves for the rotation angle in radians between a fixture's frame and
-    # the world frame, given the same origin and reference point measured in both
+    # Angle in radians of a fixture's frame about the world z, from an origin and a reference point that are
+    # both known in world and in local coordinates
     world_dx = ref_w[0] - origin_w[0]
     world_dy = ref_w[1] - origin_w[1]
     local_dx = ref_l[0] - origin_l[0]
@@ -90,22 +87,21 @@ def solve_frame_rotation(origin_w, origin_l, ref_w, ref_l):
 
 
 def compute_mazzer_pose():
-    # Gets the mazzer's origin and two reference points, one out along the
-    # local x axis and one out along the local y axis
+    # The mazzer's frame, from its origin and reference points out along its local x and y (points 3, 4, 5)
     origin_w = get_point(3)
     x_ref_w = get_point(4)
     y_ref_w = get_point(5)
 
-    # Finds the direction from the origin to each reference point in world coordinates
+    # Directions from the origin to each reference point, in world coordinates
     x_dir = tuple(x_ref_w[i] - origin_w[i] for i in range(3))
     y_dir = tuple(y_ref_w[i] - origin_w[i] for i in range(3))
 
-    # Normalizes both directions into unit vectors, these become the x and y columns of the rotation matrix
+    # Unit vectors for the x and y columns of the rotation, x is flipped since point 4 lies along the local -x
     x_axis = normalize(x_dir)
     y_axis = normalize(y_dir)
     x_axis = tuple(-c for c in x_axis)
 
-    # Takes the cross product to get a z axis that keeps the frame right handed
+    # z from the cross product, which keeps the frame right handed
     z_axis = cross_product(x_axis, y_axis)
 
     mazzer_pose = build_pose([x_axis, y_axis, z_axis], origin_w)
@@ -113,10 +109,8 @@ def compute_mazzer_pose():
 
 
 def solve_joints_near(UR5, pose, config_hint):
-    # Solves the joint angles that put the master tool at pose, choosing the solution closest to config_hint
-    # Only solutions with the shoulder up and the elbow bent the same way as the hint are kept, so a left hand
-    # hint always gives a left hand solution and a right hand hint a right hand one, since wrapped angles
-    # (e.g. j3 = 258.5 for -101.5) can otherwise make the other elbow look closer
+    # Joint solution for pose closest to config_hint, keeping only shoulder up solutions with the elbow bent the
+    # same way as the hint. Wrapped angles (e.g. j3 = 258.5 for -101.5) can otherwise make the other elbow look closer
     solutions = UR5.SolveIK_All(pose, UR5.PoseTool())
     best, best_dist = None, None
     for c in range(solutions.size(1)):
@@ -134,41 +128,128 @@ def solve_joints_near(UR5, pose, config_hint):
 
 
 def run_visual(RDK, program_name):
-    # Runs one of the station's visual programs, such as showing or hiding a ghost tool or cup, and waits for it
-    # to finish. These only change the simulation, they do not move the robot
+    # Runs a station visual program (shows or hides a ghost tool or cup) and waits for it. Simulation only
     program = RDK.Item(program_name, ITEM_TYPE_PROGRAM)
     program.RunCode()
     program.WaitFinished()
 
 
-def enable_step_mode(UR5, tls=None):
-    # Makes the robot wait for a key press in the terminal before every MoveJ and MoveL, for testing one task on its
-    # own. Enter does the move, c carries on to the end without stopping again, escape stops the script before the
-    # move. Pass tls as well to step through the tool stand routines, which move through their own robot item
-    # Only the __main__ block at the bottom of each task file calls this, so the full run in __main.py never waits
-    state = {"paused": True, "count": 0}
+def enable_space_pause(UR5, tls=None):
+    # Space in the terminal pauses the run, space again plays it. In simulation the pause freezes the robot mid
+    # move, by dropping the simulation speed to its slowest. On the real robot it holds before the next move
+    # instead. Pass tls to also hold the tool stand routines. Click the terminal first, the keys are read from it
+    simulating = UR5.link.RunMode() == RUNMODE_SIMULATE
+    playing = threading.Event()
+    playing.set()
 
-    def wait_then(move, kind):
-        def stepped(*args, **kwargs):
-            state["count"] += 1
-            if state["paused"]:
-                caller = sys._getframe(1)
-                source = linecache.getline(caller.f_code.co_filename, caller.f_lineno).strip()
-                print(f"[step {state['count']}] {kind}: {source}")
-                print("    enter to move, c to carry on without stopping, escape to stop here")
-                while True:
-                    key = msvcrt.getch()
-                    if key == b"\r":
-                        break
-                    if key in (b"c", b"C"):
-                        state["paused"] = False
-                        break
-                    if key == b"\x1b":
-                        raise SystemExit(f"Stopped before step {state['count']}, the robot has not made this move")
+    # The key listener needs its own connection, the main one is busy for as long as a move is running
+    RDK = Robolink()
+    normal_speed = RDK.SimulationSpeed()
+    if normal_speed < 0.01:
+        # Left over from a run that was killed while paused
+        normal_speed = 1
+        RDK.setSimulationSpeed(normal_speed)
+    atexit.register(RDK.setSimulationSpeed, normal_speed)
+
+    def listen():
+        while True:
+            if not msvcrt.kbhit():
+                time.sleep(0.05)
+                continue
+            key = msvcrt.getch()
+            if key == b"\x03":
+                _thread.interrupt_main()
+            if key != b" ":
+                continue
+            if playing.is_set():
+                playing.clear()
+                if simulating:
+                    RDK.setSimulationSpeed(0.001)
+                print("[paused] space to play")
+            else:
+                if simulating:
+                    RDK.setSimulationSpeed(normal_speed)
+                playing.set()
+                print("[playing] space to pause")
+
+    def hold_then(move):
+        def held(*args, **kwargs):
+            playing.wait()
             return move(*args, **kwargs)
-        return stepped
+        return held
 
     robots = [UR5] if tls is None else [UR5, tls.UR5]
     for robot in robots:
-        robot.MoveJ = wait_then(robot.MoveJ, "MoveJ")
-        robot.MoveL = wait_then(robot.MoveL, "MoveL")
+        robot.MoveJ = hold_then(robot.MoveJ)
+        robot.MoveL = hold_then(robot.MoveL)
+
+    threading.Thread(target=listen, daemon=True).start()
+    print("[pause] Space pauses and plays the run, click this terminal first")
+
+
+def enable_collision_report(UR5, tls=None):
+    # Simulation only. Turns collision checking on and prints every move where the robot, or the tool it holds,
+    # touches something, with what touched. Returns the list of contacts, which fills up as the run goes.
+    # RoboDK stops a move at its first contact, so that move is then finished with checking off, and only the
+    # first contact of each move is caught. Contacts that are meant to happen are listed too, a tool sitting in
+    # its fixture or pressing a button, so read the list for the ones that are not
+    # The first time in a station RoboDK takes a while to prepare, hence its own connection with a long timeout
+    RDK = Robolink()
+    RDK.COM.settimeout(300)
+
+    # The tools are mounted on the flange and on each other, so they always touch. Those pairs are left out of
+    # the station's collision map, or every move would stop before it started
+    robot = RDK.Item(UR5.Name())
+    tools_on_arm = RDK.ItemList(ITEM_TYPE_TOOL)
+    for i, tool in enumerate(tools_on_arm):
+        for link in range(7):
+            RDK.setCollisionActivePair(COLLISION_OFF, tool, robot, 0, link)
+        for other in tools_on_arm[i + 1:]:
+            RDK.setCollisionActivePair(COLLISION_OFF, tool, other)
+
+    RDK.setCollisionActive(COLLISION_ON)
+    atexit.register(RDK.setCollisionActive, COLLISION_OFF)
+
+    contacts = []
+    state = {"touching": None}
+
+    def check_then(move):
+        def checked(*args, **kwargs):
+            try:
+                result = move(*args, **kwargs)
+                state["touching"] = None
+                return result
+            except StoppedError as exc:
+                if "ollision" not in str(exc):
+                    raise
+
+            touching = sorted({" and ".join(sorted((a.Name(), b.Name()))) for a, b, _, _ in RDK.CollisionPairs()})
+
+            # A contact carried over from the move before is only reported once
+            if touching != state["touching"]:
+                caller = sys._getframe(1)
+                while os.path.abspath(caller.f_code.co_filename) == os.path.abspath(__file__):
+                    caller = caller.f_back
+                where = f"{os.path.basename(caller.f_code.co_filename)}:{caller.f_lineno}"
+                source = linecache.getline(caller.f_code.co_filename, caller.f_lineno).strip()
+                contacts.append((where, source, touching))
+                print(f"[collision] {where}  {source}")
+                for pair in touching:
+                    print(f"    {pair}")
+            state["touching"] = touching
+
+            # Finishes the move with checking off, then turns it back on for the next one
+            RDK.setCollisionActive(COLLISION_OFF)
+            try:
+                return move(*args, **kwargs)
+            finally:
+                RDK.setCollisionActive(COLLISION_ON)
+        return checked
+
+    robots = [UR5] if tls is None else [UR5, tls.UR5]
+    for item in robots:
+        item.MoveJ = check_then(item.MoveJ)
+        item.MoveL = check_then(item.MoveL)
+
+    print("[collision] Collision checking is on, every contact is printed as it happens")
+    return contacts

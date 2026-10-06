@@ -3,7 +3,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import get_point, build_pose, compute_mazzer_pose, compute_waypoints, run_visual, enable_step_mode
+from _common import get_point, build_pose, compute_mazzer_pose, compute_waypoints, run_visual, enable_space_pause
 
 # Ip address of the raspberry pi serving the mazzer scale on cart 3
 IP_MAZZER_3 = "192.168.22.3"
@@ -17,8 +17,7 @@ SETTLE_SECONDS = 0
 
 
 def rotate_about_point_world_z(pose, pivot_point_world, angle_deg):
-    # Sweeps a pose through an arc about the world's z axis, centered on a
-    # given world point, rather than about the pose's own origin
+    # Rotates a pose about the world z axis through a given world point
     to_pivot = transl(*pivot_point_world)
     rotation = rotz(angle_deg * pi/180)
     from_pivot = transl(*tuple(-c for c in pivot_point_world))
@@ -26,8 +25,7 @@ def rotate_about_point_world_z(pose, pivot_point_world, angle_deg):
 
 
 def rotate_about_tip(pose, tip_offset_mm, angle_adjust):
-    # Rotates a pose about the tool's tip instead of about the tcp, so the
-    # tip's position stays fixed while only its facing direction changes
+    # Same as rotate_about_tip in _common.py
     return pose \
         * transl(*tip_offset_mm) \
         * angle_adjust \
@@ -35,26 +33,23 @@ def rotate_about_tip(pose, tip_offset_mm, angle_adjust):
 
 
 def compute_task_d_approach_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, dose_bar_mount_angle_deg):
+    # Same steps as part a, on the mazzer's frame. Reference only, see run_task_d
     mazzer_pose = compute_mazzer_pose()
     mazzer_pose = mazzer_pose * transl(*fixture_fine_tune_mm)
 
-    # Sets the placement point as the dose lever face, with the tool orientation found by inspection
+    # The target is the dose lever face (point 24)
     point_local = get_point(24)
     axis_mapping = [[0, 1, 0], [0, 0, -1], [-1, 0, 0]]
     T_fixture_placement = build_pose(axis_mapping, point_local)
     T_world_target = mazzer_pose * T_fixture_placement
 
-    # Sets the mazzer tool's contact point, the dose bar edge is the pulling surface
-    # This point sits off the tool's own centre axis, unlike the on axis point used
-    # for button presses and lever locks, so it also needs the tool's own mounting
-    # angle corrected for here, the same way the rancilio tool's off axis contact
-    # point is corrected for in _partA.py and _partF.py
+    # The tool's contact point is the dose bar edge (point 52). It sits off the tool's centre axis, so the
+    # tool's mounting angle is corrected for here
     tool_point_local = get_point(52)
     T_tool_offset = rotz(dose_bar_mount_angle_deg * pi/180) * transl(*tool_point_local)
     task_d_approach_pose = T_world_target * T_tool_offset.inv()
 
-    # Applies the approach angle correction, rotated about the dose bar edge
-    # itself so the contact point stays fixed while only the facing direction changes
+    # Angle adjust about the dose bar edge, so the contact point stays put
     angle_adjust = rotx(approach_angle_adjust_deg[0]*pi/180) \
                  * roty(approach_angle_adjust_deg[1]*pi/180) \
                  * rotz(approach_angle_adjust_deg[2]*pi/180)
@@ -64,9 +59,8 @@ def compute_task_d_approach_pose(fixture_fine_tune_mm, approach_angle_adjust_deg
 
 
 def compute_task_d_pull_steps(start_pose, pull_angle_deg, num_steps, pivot_fine_tune_mm):
-    # The dose lever pivots about the mazzer's own origin (point 21), so the pull is
-    # modelled as a rotation about the world's z axis centered on that point,
-    # sampled at several angles along the sweep
+    # The lever pivots about the mazzer's origin (point 21), so the pull is start_pose swept about the world z
+    # through that point, sampled at num_steps angles
     mazzer_pivot_local = get_point(21)
     mazzer_pivot_local = tuple(mazzer_pivot_local[i] + pivot_fine_tune_mm[i] for i in range(3))
 
@@ -84,8 +78,7 @@ def compute_task_d_pull_steps(start_pose, pull_angle_deg, num_steps, pivot_fine_
 
 
 def check_arc_reachable(UR5, pull_steps):
-    # Reports whether each point on the pull arc has an inverse kinematics solution,
-    # so an unreachable point partway through the sweep is caught before running
+    # Prints whether each point on the arc has an inverse kinematics solution
     for i, step_pose in enumerate(pull_steps, start=1):
         solution = UR5.SolveIK(step_pose)
         status = "reachable" if solution else "UNREACHABLE"
@@ -151,9 +144,6 @@ def dose_until_target(UR5, client, pull_steps, start_pose, max_pulls):
 staging_intermediate_pose = [118.506308, -97.117079, 116.960032, -109.759306, -89.525329, -206.644986]
 
 # Jogged joint waypoints that carry the tool around the mazzer body and in to the lever
-approach_intermediate_pose_1 = [118.916783, -94.293217, 121.650141, -117.276423, -89.524465, -206.234482]
-approach_intermediate_pose_2 = [118.920000, -94.290000, 121.650000, -117.280000, -179.520000, -206.230000]
-approach_intermediate_pose_3 = [118.920000, -94.290000, 131.650000, -107.280000, -269.520000, -206.230000]
 approach_intermediate_pose_4 = [118.920000, -94.290000, 131.650000, -37.280000, -269.520000, -206.230000]
 
 # Joint pose standing off from the lever, then the pre pull pose the sweep starts from
@@ -166,58 +156,35 @@ retreat_intermediate_pose_1 = [129.931477, -78.302406, 113.186900, -35.167926, -
 
 def run_task_d(UR5, tls, RDK):
     # ==================== FINE TUNING (edit these in the lab) ====================
-    # The pull is a sweep of the tool in an arc about the lever pivot, starting from the jogged
-    # lever_off_intermediate_pose. The settings below change that arc and the dosing.
+    # The pull sweeps the tool in an arc about the lever pivot, starting from the jogged lever_off_intermediate_pose
 
-    # pull_angle_deg
-    # How far the tool sweeps the lever per pull, in degrees, about the world's z axis around the lever pivot.
-    # Bigger = a longer pull, so more grounds per pull. Smaller = a shorter pull, so less per pull.
-    # The lab frames diagram suggests roughly 60 for a full dose, but 37 is what is currently set.
-    # This is the main knob for changing the dose. The direction of the sweep is fixed, a bigger number
-    # does not reverse it.
+    # Degrees swept per pull, the main knob for the dose, bigger gives more grounds per pull
     pull_angle_deg = 37
 
-    # num_steps
-    # How many intermediate points the arc is split into. More = a smoother path that follows the lever's rotation
-    # more closely, but a slower run and more moves. Fewer = faster but jerkier, with a larger jump between points.
-    # Does not change how far the lever is pulled, only how smoothly.
+    # Points the arc is split into, more is smoother but slower
     num_steps = 20
 
-    # pivot_fine_tune_mm = (x, y, z) in mm
-    # Shifts the centre the arc rotates about, along the mazzer's own local axes. It does not move the start pose,
-    # so it changes the RADIUS of the arc and where the tool ends up.
-    # Nudge it if the tool drifts away from, or pushes into, the lever partway through the pull.
+    # Shifts the centre of the arc along the mazzer's own axes, nudge it if the tool drifts off or digs into the lever
     pivot_fine_tune_mm = (0, 0, 0)
 
-    # use_scale
-    # True on the lab network so the dose is checked against the real scale and the pull repeats until the
-    # target is reached. False pulls the lever once with no scale reading, for simulation.
+    # True reads the real scale and pulls until the target dose, False pulls once, for simulation
     use_scale = False
 
-    # max_pulls
-    # Only matters when use_scale is True. The most pulls allowed before it gives up, so a broken scale
-    # can't make the robot pull forever.
+    # The most pulls allowed with the scale in use, so a broken scale can't make the robot pull forever
     max_pulls = 5
 
-    # The target dose (TARGET_G), the tolerance (TOLERANCE_G) and the wait for the grounds to settle before
-    # the scale is read (SETTLE_SECONDS) are constants at the top of this file, not here.
+    # TARGET_G, TOLERANCE_G and SETTLE_SECONDS are at the top of this file
 
-    # ---------- Reference only, these have NO effect on the run ----------
-    # These three only build task_d_approach_pose from the survey points. That pose no longer drives any move,
-    # because the pull now starts from the jogged lever_off_intermediate_pose, so changing them does nothing.
-    # To move where the pull starts, re-jog lever_off_intermediate_pose instead.
+    # Reference only, these build task_d_approach_pose, which no longer drives any move. To move where the pull
+    # starts, re-jog lever_off_intermediate_pose instead
     fixture_fine_tune_mm = (20, 40, -10)
     approach_angle_adjust_deg = (-90, 25, 140)
     dose_bar_mount_angle_deg = 0
     task_d_approach_pose = compute_task_d_approach_pose(
         fixture_fine_tune_mm, approach_angle_adjust_deg, dose_bar_mount_angle_deg)
     # ===========================================================================
-    # Jogged joint poses (staging poses, lever_approach_pose, lever_off_intermediate_pose, retreat pose) are not
-    # affected by any of the settings above. lever_off_intermediate_pose is where the arc STARTS, so re-jogging it
-    # moves the whole pull. lever_approach_pose is the standoff just before it.
 
-    # Workflow reference, not used for movement, the standoff below was computed from
-    # the approach pose, jogged near, then the resulting joints hardcoded as lever_approach_pose
+    # The standoff was first computed like this, jogged near, then hardcoded as lever_approach_pose
     # waypoints = compute_waypoints(task_d_approach_pose, offsets=[("approach", (20, -50, 0), (0, 0, 0))])
     # UR5.MoveL(waypoints["approach"], True)
 
@@ -234,9 +201,6 @@ def run_task_d(UR5, tls, RDK):
     UR5.MoveJ(staging_intermediate_pose, True)
 
     # Goes through the staging poses to clear the mazzer body
-    UR5.MoveJ(approach_intermediate_pose_1, True)
-    UR5.MoveJ(approach_intermediate_pose_2, True)
-    UR5.MoveJ(approach_intermediate_pose_3, True)
     UR5.MoveJ(approach_intermediate_pose_4, True)
 
     # Moves in to the lever and stops at the pre pull pose
@@ -254,9 +218,6 @@ def run_task_d(UR5, tls, RDK):
     # Retreats from the lever back out through the staging poses
     UR5.MoveL(retreat_intermediate_pose_1, True)
     UR5.MoveJ(approach_intermediate_pose_4, True)
-    UR5.MoveJ(approach_intermediate_pose_3, True)
-    UR5.MoveJ(approach_intermediate_pose_2, True)
-    UR5.MoveJ(approach_intermediate_pose_1, True)
 
     UR5.MoveJ(staging_intermediate_pose, True)
 
@@ -276,8 +237,8 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
-    enable_step_mode(UR5, tls)
+    # Space in the terminal pauses and plays the run, for testing this task on its own
+    enable_space_pause(UR5, tls)
 
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 

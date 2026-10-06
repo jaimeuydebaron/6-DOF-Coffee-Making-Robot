@@ -1,13 +1,12 @@
 # _partP.py
 # Task p, use the mazzer tool to operate the rancilio hot water switch until the scale reports 32 g of water
-# The hot water switch is a rocker on the front of the rancilio (point 37). Pressing the top half of the rocker into the
-# machine turns the water on, pressing the bottom half turns it off, the same way part c presses the mazzer's on and
-# off buttons. While the water runs the rancilio scale is read, the same way part d reads the mazzer scale
+# The switch is a rocker (point 37), pressing its top half turns the water on and its bottom half turns it off,
+# like part c's buttons. The rancilio scale is read while the water runs, like part d's dosing
 from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep, time
 import tools
-from _common import get_point, build_pose, rotate_about_tip, compute_waypoints, run_visual, enable_step_mode
+from _common import get_point, build_pose, rotate_about_tip, compute_waypoints, run_visual, enable_space_pause
 from _partL import compute_rancilio_pose
 
 # Ip address of the raspberry pi serving the rancilio scale on cart 3
@@ -22,10 +21,10 @@ SETTLE_SECONDS = 1
 
 
 def compute_task_p_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, press_depth_mm=0):
+    # Same steps as part a, on the rancilio's frame
     rancilio_pose = compute_rancilio_pose(fixture_fine_tune_mm)
 
-    # Sets the placement point as the switch rocker, with the tool orientation found by inspection, the tool
-    # pointing straight into the front face of the machine
+    # The target is the switch rocker (point 37), with the tool pointing straight into the front of the machine
     point_local = get_point(37)
     axis_mapping = [
         [0, 0, 1],   # Tool x axis lines up with the rancilio's z axis, up
@@ -35,18 +34,18 @@ def compute_task_p_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, press_d
     T_fixture_placement = build_pose(axis_mapping, point_local)
     T_world_target = rancilio_pose * T_fixture_placement
 
-    # Sets the mazzer tool's contact point, the cushioning cylinder tip (point 51)
+    # The tool's contact point is its tip (point 51)
     tool_point_local = get_point(51)
     T_tool_offset = transl(*tool_point_local)
     task_p_pose = T_world_target * T_tool_offset.inv()
 
-    # Applies the approach angle correction, rotated about the tool tip so its position doesn't move
+    # Angle adjust about the tip
     angle_adjust = rotx(approach_angle_adjust_deg[0]*pi/180) \
                  * roty(approach_angle_adjust_deg[1]*pi/180) \
                  * rotz(approach_angle_adjust_deg[2]*pi/180)
     task_p_pose = rotate_about_tip(task_p_pose, tool_point_local, angle_adjust)
 
-    # Pushes the tip press_depth_mm further in along the tool's own z, into the rocker, zero just touches it
+    # Pushes the tip press_depth_mm further in along the tool's own z, zero just touches the rocker
     task_p_pose = task_p_pose * transl(0, 0, press_depth_mm)
 
     return task_p_pose
@@ -115,85 +114,57 @@ def run_task_p(UR5, tls, RDK):
     it, backed off the switch, ready for part q """
 
     # ==================== FINE TUNING (edit these in the lab) ====================
-    # The on press and the off press are tuned separately, so changing one does not affect the other.
+    # The on and off presses are tuned separately
 
-    # on_fixture_fine_tune_mm = (x, y, z) in mm
-    # Moves WHERE the tip presses to turn the water ON, by shifting the assumed position of the rancilio along the
-    # rancilio's own axes. The tool keeps its angle and just moves as a whole.
-    #   x: shifts along the rancilio's local x, out the front of the machine
-    #   y: shifts along the rancilio's local y, across the front of the machine
-    #   z: raises (+) or lowers (-) the press, it must be on the top half of the rocker to turn the water on
+    # Shifts where the tip presses for ON, along the rancilio's own axes. z must put it on the top half of the rocker
     on_fixture_fine_tune_mm = (0, 0, 8)
 
-    # off_fixture_fine_tune_mm = (x, y, z) in mm
-    # Same as on_fixture_fine_tune_mm, but for the press that turns the water OFF, which must be on the bottom half
-    # of the rocker.
+    # The same for OFF, which must be on the bottom half of the rocker
     off_fixture_fine_tune_mm = (0, 0, -4)
 
-    # approach_angle_adjust_deg = (rx, ry, rz) in degrees
-    # Rotates the tool about its own x, y, z axes (x, then y, then z) for both presses. It pivots about the tool tip
-    # (point 51), so the tip stays on the rocker and only the tool's facing direction changes. Use it if the tool body
-    # gets close to the rancilio tool's handle or the cup.
+    # Rotates the tool about its tip, for both presses
     approach_angle_adjust_deg = (0, 0, 0)
 
-    # press_depth_mm
-    # How far past touching the rocker the tip pushes into the machine, along the tool's own z, for both presses.
-    # Bigger = a firmer press, make it bigger if the rocker doesn't flip, smaller if the tool pushes too hard.
+    # How far past touching the tip pushes in, for both presses, bigger if the rocker doesn't flip
     press_depth_mm = 5
 
-    # approach_backoff_mm
-    # How far back from the rocker, along the tool's own z, the tip lines up before each press and backs off to after.
-    # Bigger = more clearance from the front of the machine, smaller = shorter presses.
+    # How far back from the rocker the tip lines up before each press, and backs off to after
     approach_backoff_mm = 40
 
-    # use_scale
-    # True on the lab network so the water is checked against the real scale and turned off at the target.
-    # False runs the water for sim_dispense_s with no scale reading, for simulation.
+    # True reads the real scale and turns the water off at the target, False runs it for sim_dispense_s
     use_scale = False
 
-    # stop_early_g
-    # Only matters when use_scale is True. Turns the water off this many grams before the target, since water still
-    # runs while the tool presses the rocker off. Tune it in the lab until the scale settles at 32 g (+/- 0.1 g).
+    # With the scale, turns the water off this many grams early, since it still runs while the rocker is being
+    # pressed off. Tune it until the scale settles at 32 g
     stop_early_g = 0.0
 
-    # poll_s
-    # Only matters when use_scale is True. How often the scale is read while the water runs, in seconds.
+    # With the scale, how often it is read while the water runs, in seconds
     poll_s = 0.1
 
-    # max_dispense_s
-    # Only matters when use_scale is True. The longest the water is left running, in seconds, so a broken scale
-    # can't overflow the cup.
+    # With the scale, the longest the water is left running, in seconds, so a broken scale can't overflow the cup
     max_dispense_s = 30
 
-    # sim_dispense_s
-    # Only matters when use_scale is False. How long the water runs, in seconds.
+    # Without the scale, how long the water runs, in seconds
     sim_dispense_s = 1
 
-    # The target water (TARGET_G), the tolerance (TOLERANCE_G) and the wait for the scale to settle (SETTLE_SECONDS)
-    # are constants at the top of this file, not here.
-    # on_approach_pose below is a jogged joint pose and is NOT affected by the settings here. Re-jog it if the arm
-    # hits the rancilio tool's handle or the cup on the way round to the front of the rancilio.
+    # TARGET_G, TOLERANCE_G and SETTLE_SECONDS are at the top of this file
     # =============================================================================
 
     # Computes the poses pressing the rocker on and off
     on_pose = compute_task_p_pose(on_fixture_fine_tune_mm, approach_angle_adjust_deg, press_depth_mm)
     off_pose = compute_task_p_pose(off_fixture_fine_tune_mm, approach_angle_adjust_deg, press_depth_mm)
 
-    # Computes the poses lined up off the rocker before each press, backed straight off along the tool's own z
-    # Each offset is (name, (x, y, z) in mm, (rx, ry, rz) in degrees), applied in the tool's OWN frame
-    on_waypoints = compute_waypoints(on_pose, offsets=[
-        ("approach", (0, 0, -(approach_backoff_mm + press_depth_mm)), (0, 0, 0)),
-    ])
+    # The pose lined up off the rocker before the off press, backed off along the tool's own z
     off_waypoints = compute_waypoints(off_pose, offsets=[
         ("approach", (0, 0, -(approach_backoff_mm + press_depth_mm)), (0, 0, 0)),
     ])
     # Jogged joint pose lined up off the top of the rocker, the arm swings round from part o's lever to here
-    on_approach_pose = [13.947107, -97.104966, 115.451384, -18.346418, 43.984643, 90.000000]
+    on_approach_pose = [9.129708, -83.365625, 136.423888, -233.058821, -39.167246, -89.999771]
     off_approach_pose = off_waypoints["approach"]
 
     # The mazzer tool is already held, carried over from task o
     # Swings round to the front of the rancilio and lines up off the top of the rocker
-    UR5.MoveJ(on_approach_pose, True)
+    UR5.MoveL(on_approach_pose, True)
 
     # Turns the water on, waits until the scale reports the target, or for a fixed time if no scale is in use,
     # then turns the water off
@@ -224,8 +195,8 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
-    enable_step_mode(UR5, tls)
+    # Space in the terminal pauses and plays the run, for testing this task on its own
+    enable_space_pause(UR5, tls)
 
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 

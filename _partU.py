@@ -3,15 +3,13 @@
 # This is part t on the other brush, it slides straight across from above the silicone brush, then cleans the same way
 from robodk.robolink import *
 from robodk.robomath import *
-from time import sleep
 import tools
-from _common import run_visual, enable_step_mode
+from _common import run_visual, enable_space_pause
 from _partT import compute_task_t_pose, clean_on_brush, BRISTLE_BRUSH, approach_intermediate_pose_2
 
 
 def compute_task_u_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, hover_mm=0):
-    # Reuses part t's brush pose on the bristle brush, so the basket meets it the same way it met the silicone brush.
-    # Pass the same values part t used
+    # Part t's brush pose on the bristle brush, pass part t's values
     return compute_task_t_pose(BRISTLE_BRUSH, fixture_fine_tune_mm, approach_angle_adjust_deg, hover_mm)
 
 
@@ -55,8 +53,8 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
-    enable_step_mode(UR5, tls)
+    # Space in the terminal pauses and plays the run, for testing this task on its own
+    enable_space_pause(UR5, tls)
 
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 

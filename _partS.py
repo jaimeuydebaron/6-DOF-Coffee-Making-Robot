@@ -8,7 +8,7 @@ from robodk.robolink import *
 from robodk.robomath import *
 from time import sleep
 import tools
-from _common import run_visual, enable_step_mode
+from _common import run_visual
 from _partL import compute_rancilio_pose, compute_task_l_pose, compute_task_l_twist_steps
 
 
@@ -31,7 +31,7 @@ def compute_task_s_poses(fixture_fine_tune_mm, approach_angle_adjust_deg, extra_
 
 # Jogged joint waypoint that brings the empty gripper round towards the rancilio before lining up above the tool's
 # coupling
-approach_intermediate_pose_1 = [23.561060, -88.604205, 127.365805, -38.761601, 68.598596, 140.000000]
+approach_intermediate_pose_1 = [23.561060, -88.604205, 127.365805, -38.761601, 68.598596, -220.000000]
 
 
 def run_task_s(UR5, tls, RDK):
@@ -118,9 +118,6 @@ if __name__ == "__main__":
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
-
-    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
-    enable_step_mode(UR5, tls)
 
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 

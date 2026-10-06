@@ -9,9 +9,8 @@
 # Set both False for a simulation run, both True in the lab
 from robodk.robolink import *
 from robodk.robomath import *
-import msvcrt
 import tools
-from _common import run_visual
+from _common import run_visual, enable_space_pause, enable_collision_report
 
 from _partA import run_task_a
 from _partB import run_task_b
@@ -39,16 +38,9 @@ from _partV import run_task_v
 # example: e_to_f_transition_joints = [j1, j2, j3, j4, j5, j6]
 
 
-def wait_for_go_ahead():
-    # Waits for a key press in the terminal before the next step, returns True for enter and False for escape.
-    # Any other key is ignored. Run this file from a terminal, the key presses are read from its window
-    print("[main] Press enter to start it, or escape to go to home_l and stop")
-    while True:
-        key = msvcrt.getch()
-        if key == b"\r":
-            return True
-        if key == b"\x1b":
-            return False
+# True turns collision checking on for a simulation run, and prints every move where the robot or the tool it
+# holds touches something. The run is slower with it on, and it is ignored on the real robot
+CHECK_COLLISIONS = False
 
 
 def main():
@@ -83,8 +75,10 @@ def main():
         ("task", "c", "turn the mazzer on and off", run_task_c),
         # Doses the grounds, ends HOLDING the mazzer tool
         ("task", "d", "dose the grounds", run_task_d),
-        # Locks the mazzer scale, ends with the mazzer tool back on the stand
-        ("task", "e", "lock the mazzer scale", run_task_e),
+        # Task e, with task m run inside it while the mazzer tool is still held. Locks the mazzer scale and
+        # dispenses the cup (m), ends with the mazzer tool back on the stand. Do NOT add m here as well, the cup
+        # would be dispensed twice
+        ("task", "e+m", "lock the mazzer scale, dispense the cup", run_task_e),
         # Picks the rancilio tool up off the mazzer scale, ends HOLDING the rancilio tool
         ("task", "f", "pick the rancilio tool up off the mazzer scale", run_task_f),
         # Tasks g and h, places the rancilio tool in the wdt and shuts it, ends empty handed at home_l
@@ -95,11 +89,10 @@ def main():
         ("task", "j", "take the rancilio tool out of the wdt", run_task_j),
         # Tamps in the puq, ends HOLDING the rancilio tool, backed out of the puq
         ("task", "k", "tamp in the puq", run_task_k),
-        # Task l, with tasks m and n run inside it. Sets the rancilio tool down on the mazzer scale, dispenses the
-        # cup (m) and places it on the rancilio scale (n), then picks the rancilio tool back up and locks it into the
-        # group head. Ends empty handed above the rancilio. Do NOT add m or n here as well, the cup would be
-        # dispensed twice
-        ("task", "l+m+n", "dispense the cup, place it on the rancilio scale, lock the rancilio tool into the group head", run_task_l),
+        # Task l, with task n run inside it. Sets the rancilio tool down on the mazzer scale, places the cup on the
+        # rancilio scale (n), then picks the rancilio tool back up and locks it into the group head. Ends empty
+        # handed above the rancilio. Do NOT add n here as well, the cup would be placed twice
+        ("task", "l+n", "place the cup on the rancilio scale, lock the rancilio tool into the group head", run_task_l),
         # Unlocks the rancilio scale, ends HOLDING the mazzer tool
         ("task", "o", "unlock the rancilio scale", run_task_o),
         # Runs the hot water into the cup, ends HOLDING the mazzer tool
@@ -121,22 +114,16 @@ def main():
         ("waypoint", "home", "return to home_l", RDK.Item("Home_L", ITEM_TYPE_TARGET)),
     ]
 
-    # Only a simulation run waits for a key press between steps, on the real robot the run goes straight through
-    simulating = RDK.RunMode() == RUNMODE_SIMULATE
+    # Only a simulation run can be paused, space in the terminal pauses it and space again plays it. On the real
+    # robot the run goes straight through
+    contacts = []
+    if RDK.RunMode() == RUNMODE_SIMULATE:
+        if CHECK_COLLISIONS:
+            contacts = enable_collision_report(UR5, tls)
+        enable_space_pause(UR5, tls)
 
-    just_ran = None
     for step, (kind, name, description, item) in enumerate(sequence):
         label = f"{kind} {name.upper()} ({step + 1} of {len(sequence)}): {description}"
-
-        # Waits between steps for enter to carry on, or escape to send the robot to home_l and stop the run there
-        if step > 0:
-            print(f"[main] Just ran  {just_ran}")
-        if step > 0 and simulating:
-            print(f"[main] Next up   {label}")
-            if not wait_for_go_ahead():
-                print("[main] Escape pressed, going to home_l and stopping the sequence here")
-                UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
-                return
 
         print(f"[main] Now running {label}")
         try:
@@ -147,9 +134,17 @@ def main():
         except Exception as exc:
             print(f"[main] Failed during {label}, stopping the sequence here: {exc}")
             raise
-        just_ran = label
 
     print("[main] Full run complete")
+    if CHECK_COLLISIONS:
+        print(f"[main] {len(contacts)} moves touched something")
+        # A line of code that touched the same things more than once, such as a step in a loop, is listed once
+        counts = {}
+        for where, source, touching in contacts:
+            line = f"{where}  {source}  ->  {', '.join(touching)}"
+            counts[line] = counts.get(line, 0) + 1
+        for line, count in counts.items():
+            print(f"    {line}" + (f"  (x{count})" if count > 1 else ""))
 
 
 if __name__ == "__main__":

@@ -4,10 +4,9 @@
 # towards the base, turns round at the base, and lowers the cup straight down onto the table in the customer zone
 from robodk.robolink import *
 from robodk.robomath import *
-from time import sleep
 import math
 import tools
-from _common import get_point, build_pose, compute_waypoints, run_visual, enable_step_mode
+from _common import get_point, build_pose, compute_waypoints, run_visual, enable_space_pause
 from _partN import compute_rancilio_scale_pose, compute_cup_tool_offset
 
 
@@ -24,12 +23,11 @@ CUP_AXIS_MAPPING = [
 
 
 def compute_customer_zone_pose(fixture_fine_tune_mm):
-    # The customer zone is a single point on the table, so it has no orientation of its own, its frame is taken
-    # as the world frame moved to that point
+    # The customer zone is a single point on the table, so its frame is the world frame moved to that point
     origin_w = get_point(62)
     customer_zone_pose = transl(*origin_w)
 
-    # Applies the fixture calibration correction
+    # Fine tune
     customer_zone_pose = customer_zone_pose * transl(*fixture_fine_tune_mm)
 
     return customer_zone_pose
@@ -38,8 +36,7 @@ def compute_customer_zone_pose(fixture_fine_tune_mm):
 def compute_task_r_pick_pose(fixture_fine_tune_mm, approach_yaw_deg):
     rancilio_scale_pose = compute_rancilio_scale_pose(fixture_fine_tune_mm)
 
-    # Sets the placement point as the pan centre raised to the grip height, with the tool orientation found by
-    # inspection
+    # The target is the pan centre (point 41) raised to the grip height
     pan_local = get_point(41)
     point_local = (pan_local[0], pan_local[1], pan_local[2] + CUP_GRIP_HEIGHT_MM)
     T_fixture_placement = build_pose(CUP_AXIS_MAPPING, point_local)
@@ -48,7 +45,7 @@ def compute_task_r_pick_pose(fixture_fine_tune_mm, approach_yaw_deg):
     T_fixture_placement = T_fixture_placement * rotx(approach_yaw_deg * pi/180)
     T_world_target = rancilio_scale_pose * T_fixture_placement
 
-    # Sets the cup tool's contact point, the shut holder face (point 49), and its mounting angle offset
+    # The cup tool's contact point is the shut holder face (point 49)
     T_tool_offset = compute_cup_tool_offset(get_point(49))
     task_r_pick_pose = T_world_target * T_tool_offset.inv()
 
@@ -58,7 +55,7 @@ def compute_task_r_pick_pose(fixture_fine_tune_mm, approach_yaw_deg):
 def compute_task_r_place_pose(fixture_fine_tune_mm, approach_yaw_deg):
     customer_zone_pose = compute_customer_zone_pose(fixture_fine_tune_mm)
 
-    # Sets the placement point as the grip height above the table, with the tool orientation found by inspection
+    # The target is the grip height above the table
     point_local = (0, 0, CUP_GRIP_HEIGHT_MM)
     T_fixture_placement = build_pose(CUP_AXIS_MAPPING, point_local)
 
@@ -66,7 +63,7 @@ def compute_task_r_place_pose(fixture_fine_tune_mm, approach_yaw_deg):
     T_fixture_placement = T_fixture_placement * rotx(approach_yaw_deg * pi/180)
     T_world_target = customer_zone_pose * T_fixture_placement
 
-    # Sets the cup tool's contact point, the shut holder face (point 49), and its mounting angle offset
+    # The cup tool's contact point is the shut holder face (point 49)
     T_tool_offset = compute_cup_tool_offset(get_point(49))
     task_r_place_pose = T_world_target * T_tool_offset.inv()
 
@@ -108,47 +105,31 @@ def run_task_r(UR5, tls, RDK):
 
     # ==================== FINE TUNING (edit these in the lab) ====================
 
-    # pick_fixture_fine_tune_mm = (x, y, z) in mm
-    # Moves WHERE the cup is gripped, by shifting the assumed position of the rancilio scale along the scale's own
-    # axes. Every pick pose moves with it.
-    #   x: shifts along the scale's local x
-    #   y: shifts along the scale's local y
-    #   z: raises (+) or lowers (-) the grip
+    # Shifts where the cup is gripped, along the rancilio scale's own axes
     pick_fixture_fine_tune_mm = (0, 0, 0)
 
-    # place_fixture_fine_tune_mm = (x, y, z) in mm
-    # Moves WHERE the cup is set down, by shifting the customer zone point along the world's axes.
-    # z raises (+) or lowers (-) the cup, use it if the cup is dropped from too high or pressed into the table.
+    # Shifts where the cup is set down, along the world's axes. z raises (+) or lowers (-) it
     place_fixture_fine_tune_mm = (0, 0, 2)
 
-    # pick_approach_yaw_deg
-    # Swings the fork's approach direction about the cup's vertical axis at the pan, in degrees. Keeps the fork
-    # clear of the rancilio tool's handle sticking out of the group head.
+    # Swings the fork's approach about the cup's vertical axis at the pan, to clear the rancilio tool's handle
     pick_approach_yaw_deg = -50
 
-    # place_approach_yaw_adjust_deg
-    # Extra swing of the fork's direction about the cup's vertical axis at the customer zone, in degrees, on top of
-    # the pick heading turned round by the base. 0 keeps the arm the same shape as at the pick.
+    # Extra swing of the fork at the customer zone, 0 keeps the arm the same shape as at the pick
     place_approach_yaw_adjust_deg = 0
 
-    # slide_mm
-    # How far back the fork starts before sliding onto the cup, and slides back off it after letting go.
+    # How far back the fork starts before sliding onto the cup, and slides back off after letting go
     slide_mm = 100
 
-    # lift_mm
-    # How far the cup is lifted straight up off the pan once gripped, before pulling back.
+    # How far the cup is lifted off the pan once gripped, before pulling back
     lift_mm = 20
 
-    # carry_height_mm
-    # The world height the cup's base is carried at between the pan and the customer zone.
+    # The world height the cup's base is carried at
     carry_height_mm = 110
 
-    # carry_radius_mm
-    # How close to the robot base the arm is tucked in, measured to the cup, before the base is turned.
+    # How close to the robot base the cup is tucked in before the base is turned
     carry_radius_mm = 380
 
-    # There are no jogged joint poses in this part, every pose is calculated from the settings above. The carry
-    # poses are joint moves, see the comments in the motion below.
+    # No jogged poses here, every pose is calculated from the settings above
     # =============================================================================
 
     # Computes the pose gripping the cup on the pan
@@ -236,8 +217,8 @@ if __name__ == "__main__":
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Waits for enter before every move, for testing this task on its own, comment out to run straight through
-    enable_step_mode(UR5, tls)
+    # Space in the terminal pauses and plays the run, for testing this task on its own
+    enable_space_pause(UR5, tls)
 
     # RDK.Item("Reset_Simulation_L", ITEM_TYPE_PROGRAM).RunCode()
 
