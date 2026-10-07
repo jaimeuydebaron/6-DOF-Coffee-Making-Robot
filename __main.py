@@ -47,18 +47,18 @@ def main():
     RDK = Robolink()
 
     # Simulation settings, use when testing in robodk only
-    RDK.setRunMode(RUNMODE_SIMULATE)
+    # RDK.setRunMode(RUNMODE_SIMULATE)
 
     # Real robot settings, uncomment when running on the physical robot
-    # RDK.setRunMode(RUNMODE_RUN_ROBOT)
+    RDK.setRunMode(RUNMODE_RUN_ROBOT)
     # Connect to the robot before running, in the connect panel choose connect robot then press connect and get position
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)
     tls = tools.Tools(RDK)
 
-    # Resets the simulation once for the whole run, the left hand variant since the whole run is left handed.
-    # Simulation only, comment this out on the real robot
-    run_visual(RDK, "Reset_Simulation_L")
+    # # Resets the simulation once for the whole run, the left hand variant since the whole run is left handed.
+    # # Simulation only, comment this out on the real robot
+    # run_visual(RDK, "Reset_Simulation_L")
 
     # Makes sure every pose is read in the robot base frame with the master tool, as the assignment requires
     UR5.setPoseFrame(RDK.Item("UR5_Base", ITEM_TYPE_FRAME))

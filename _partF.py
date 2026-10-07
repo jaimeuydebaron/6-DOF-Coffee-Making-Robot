@@ -14,8 +14,8 @@ def compute_task_f_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, extra_t
 # Jogged waypoints for approaching the tool sitting on the mazzer scale, and
 # for retreating clear of the mazzer body afterward
 approach_intermediate_pose_1 = [118.506782, -100.274943, 101.666651, -91.307901, -89.525705, -206.644186]
-approach_intermediate_pose_2 = [147.869587, -102.441040, 117.125449, -15.935730, 119.139464, -220]
-rancilio_align_intermediate_pose = [147.869438, -79.274625, 137.134086, -59.110450, 119.138938, -220]
+approach_intermediate_pose_2 = [147.869587, -102.441040, 117.125449, -15.935730, 119.139464, -220.597282]
+rancilio_align_intermediate_pose = [147.869438, -79.274625, 137.134086, -59.110450, 119.138938, -220.596797]
 
 retreat_intermediate_pose_1 = [147.869438, -84.061570, 135.628719, -52.818138, 119.138938, -220.596797]
 
@@ -37,22 +37,27 @@ def run_task_f(UR5, tls, RDK):
     task_f_pose = compute_task_f_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, extra_tilt_deg)
     task_f_hover_pose = compute_task_f_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, extra_tilt_deg, align_hover_mm)
 
+    # Makes sure the poses are read in the robot base frame with the master tool, a tool stand routine that was
+    # stopped partway leaves the station in the tool stand's frame
+    UR5.setPoseFrame(RDK.Item("UR5_Base", ITEM_TYPE_FRAME))
+    UR5.setTool(RDK.Item("Master_Tool_(UR5)", ITEM_TYPE_TOOL))
+
     # Moves in to where the rancilio tool is sitting on the scale
     UR5.MoveJ(approach_intermediate_pose_1, True)
     UR5.MoveJ(approach_intermediate_pose_2, True)
     UR5.MoveL(rancilio_align_intermediate_pose, True)
     UR5.MoveL(task_f_pose, True)
 
-    # Grabs the tool, hides the ghost object, and shows it attached to the robot instead
-    attached_tool = RDK.Item("Rancilio_Tool_(UR5)", ITEM_TYPE_TOOL)
-    attached_tool.setVisible(True, False)
-    run_visual(RDK, "Hide_Mazzer_Scale_Rancilio_Tool")
+    # # Grabs the tool, hides the ghost object, and shows it attached to the robot instead
+    # attached_tool = RDK.Item("Rancilio_Tool_(UR5)", ITEM_TYPE_TOOL)
+    # attached_tool.setVisible(True, False)
+    # run_visual(RDK, "Hide_Mazzer_Scale_Rancilio_Tool")
 
-    tls.student_tool_attach()
+    # tls.student_tool_attach()
 
-    # Lifts straight up to the hover pose, keeping the tilt, now holding the tool
-    UR5.MoveL(task_f_hover_pose, True)
-    UR5.MoveL(retreat_intermediate_pose_1, True)
+    # # Lifts straight up to the hover pose, keeping the tilt, now holding the tool
+    # UR5.MoveL(task_f_hover_pose, True)
+    # UR5.MoveL(retreat_intermediate_pose_1, True)
 
 
 if __name__ == "__main__":
@@ -80,6 +85,6 @@ if __name__ == "__main__":
 
     run_task_f(UR5, tls, RDK)
 
-    # Returns the rancilio tool and sends the robot home, in the full run task g carries on still holding it
-    tls.rancilio_tool_detach_l_ati()
-    UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)
+    # # Returns the rancilio tool and sends the robot home, in the full run task g carries on still holding it
+    # tls.rancilio_tool_detach_l_ati()
+    # UR5.MoveJ(RDK.Item("Home_L", ITEM_TYPE_TARGET), True)

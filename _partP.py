@@ -132,7 +132,7 @@ def run_task_p(UR5, tls, RDK):
     approach_backoff_mm = 40
 
     # True reads the real scale and turns the water off at the target, False runs it for sim_dispense_s
-    use_scale = False
+    use_scale = True
 
     # With the scale, turns the water off this many grams early, since it still runs while the rocker is being
     # pressed off. Tune it until the scale settles at 32 g

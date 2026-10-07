@@ -106,6 +106,18 @@ def pull_once(UR5, pull_steps):
         UR5.MoveL(step_pose, True)
 
 
+def pull_until_target(UR5, client, pull_steps):
+    # Sweeps the tool along the arc, reading the scale after every step, and stops where it is as soon as the
+    # scale reads the target dose or above. Returns the last reading and the steps of the arc that were travelled
+    dosed_g = 0.0
+    for steps_done, step_pose in enumerate(pull_steps, start=1):
+        UR5.MoveL(step_pose, True)
+        dosed_g = read_scale_grams(client)
+        if dosed_g >= TARGET_G:
+            break
+    return dosed_g, pull_steps[:steps_done]
+
+
 def return_to_start(UR5, pull_steps, start_pose):
     # Retraces the arc backwards so the lever is released along the same path it was pulled
     for step_pose in reversed(pull_steps[:-1]):
@@ -114,21 +126,19 @@ def return_to_start(UR5, pull_steps, start_pose):
 
 
 def dose_until_target(UR5, client, pull_steps, start_pose, max_pulls):
-    # Tares the scale, then does a full pull, reads the scale and releases the lever, repeating until the
-    # dose is in the target window. Every exit leaves the tool at the start pose
+    # Tares the scale, then pulls the lever while reading the scale, and starts releasing it as soon as the scale
+    # reads the target dose or above, or at the end of the arc if it does not. Repeats until the dose is in the
+    # target window. Every exit leaves the tool at the start pose
     sleep(SETTLE_SECONDS)
     client.tare()
     sleep(SETTLE_SECONDS)
 
     dosed_g = 0.0
     for pull_number in range(1, max_pulls + 1):
-        pull_once(UR5, pull_steps)
-
-        sleep(SETTLE_SECONDS)
-        dosed_g = read_scale_grams(client)
+        dosed_g, steps_travelled = pull_until_target(UR5, client, pull_steps)
         print(f"[task d] Pull {pull_number}, dosed {dosed_g:.1f} g")
 
-        return_to_start(UR5, pull_steps, start_pose)
+        return_to_start(UR5, steps_travelled, start_pose)
 
         if dosed_g >= TARGET_G - TOLERANCE_G:
             break
@@ -168,7 +178,7 @@ def run_task_d(UR5, tls, RDK):
     pivot_fine_tune_mm = (0, 0, 0)
 
     # True reads the real scale and pulls until the target dose, False pulls once, for simulation
-    use_scale = False
+    use_scale = True
 
     # The most pulls allowed with the scale in use, so a broken scale can't make the robot pull forever
     max_pulls = 5

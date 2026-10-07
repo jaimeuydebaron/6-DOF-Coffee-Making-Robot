@@ -101,10 +101,14 @@ def run_task_t(UR5, tls, RDK):
     brush_pose = compute_task_t_pose(SILICONE_BRUSH, fixture_fine_tune_mm, approach_angle_adjust_deg)
     pressed_pose = compute_task_t_pose(SILICONE_BRUSH, fixture_fine_tune_mm, approach_angle_adjust_deg, -press_mm)
 
+    # Reads the poses in the robot base frame with the master tool
+    UR5.setPoseFrame(RDK.Item("UR5_Base", ITEM_TYPE_FRAME))
+    UR5.setTool(RDK.Item("Master_Tool_(UR5)", ITEM_TYPE_TOOL))
+
     # Swings over from where task s finishes through the jogged poses to line the basket up above the silicone
     # brush. The basket rolls over on the way, from facing up into the group head to facing down onto the brush
     UR5.MoveL(approach_intermediate_pose_1, True)
-    UR5.MoveJ(approach_intermediate_pose_3, True)
+    UR5.MoveL(approach_intermediate_pose_3, True)
     UR5.MoveJ(approach_intermediate_pose_2, True)
 
     # Cleans on the silicone brush

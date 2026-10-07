@@ -68,7 +68,7 @@ def run_task_c(UR5, tls, RDK):
     # The on and off buttons are tuned separately
 
     # Shifts where the tip presses the on button, along the mazzer's own axes
-    on_fixture_fine_tune_mm = (-32, -20, 0)
+    on_fixture_fine_tune_mm = (-32, -20, 52)
 
     # Rotates the tool about the tcp, so the tip moves too, re-tune the fine tune after changing it
     on_approach_angle_adjust_deg = (-40, 15, 0)
@@ -92,8 +92,8 @@ def run_task_c(UR5, tls, RDK):
     UR5.MoveL(on_pose, True)
     UR5.MoveJ(on_button_approach_pose, True)
 
-    sleep(3)  # Grind time, currently a placeholder for testing rather than the real brew length
-    # sleep(15) # Actual grind time
+    # sleep(3)  # Grind time, currently a placeholder for testing rather than the real brew length
+    sleep(15) # Actual grind time
 
     # Moves to press the off button, then through a jogged joint waypoint to retreat safely
     UR5.MoveL(off_button_approach_pose, True)

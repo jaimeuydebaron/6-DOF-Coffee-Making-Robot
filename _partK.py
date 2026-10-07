@@ -62,7 +62,7 @@ def compute_task_k_pose(fixture_fine_tune_mm, approach_angle_adjust_deg, extra_t
 
 # Jogged joint waypoints that carry the held rancilio tool from the wdt across to the puq, clear of both
 approach_intermediate_pose_3 = [96.730000, -93.110000, 147.360000, -54.240000, -23.270000, -220.00]
-pre_insert_intermediate_pose = [103.001510, -88.316925, -214.563363, -52.646337, -37.154132, -223.567983]
+pre_insert_intermediate_pose = [103.001510, -88.316925, 145.436637, -52.646337, -37.154132, -223.567983]
 
 
 def run_task_k(UR5, tls, RDK):
