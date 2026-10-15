@@ -183,7 +183,7 @@ def run_task_d(UR5, tls, RDK, use_scale=None):
         use_scale = True
 
     # The most pulls allowed with the scale in use, so a broken scale can't make the robot pull forever
-    max_pulls = 5
+    max_pulls = 40
 
     # TARGET_G, TOLERANCE_G and SETTLE_SECONDS are at the top of this file
 
@@ -226,9 +226,11 @@ def run_task_d(UR5, tls, RDK, use_scale=None):
     else:
         print("[task d] Scale not in use, pulling the lever once")
         pull_once(UR5, pull_steps)
+        return_to_start(UR5, pull_steps, lever_off_intermediate_pose)
 
-    # Retreats from the lever back out through the staging poses
-    UR5.MoveL(retreat_intermediate_pose_1, True)
+    # Retreats from the lever back out the way it came in, through the standoff pose. Going straight from the
+    # pre pull pose to retreat_intermediate_pose_1 swept the tool through the lever and pulled it a little more
+    UR5.MoveL(lever_approach_pose, True)
     UR5.MoveJ(approach_intermediate_pose_4, True)
 
     UR5.MoveJ(staging_intermediate_pose, True)

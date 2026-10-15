@@ -50,10 +50,10 @@ def main():
     RDK = Robolink()
 
     # Simulation settings, use when testing in robodk only
-    # RDK.setRunMode(RUNMODE_SIMULATE)
+    RDK.setRunMode(RUNMODE_SIMULATE)
 
     # Real robot settings, uncomment when running on the physical robot
-    RDK.setRunMode(RUNMODE_RUN_ROBOT)
+    # RDK.setRunMode(RUNMODE_RUN_ROBOT)
     # Connect to the robot before running, in the connect panel choose connect robot then press connect and get position
 
     UR5 = RDK.Item("UR5", ITEM_TYPE_ROBOT)

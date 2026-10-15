@@ -138,13 +138,13 @@ def run_task_p(UR5, tls, RDK, use_scale=None):
 
     # With the scale, turns the water off this many grams early, since it still runs while the rocker is being
     # pressed off. Tune it until the scale settles at 32 g
-    stop_early_g = 5.0
+    stop_early_g = 8
 
     # With the scale, how often it is read while the water runs, in seconds
     poll_s = 0.1
 
     # With the scale, the longest the water is left running, in seconds, so a broken scale can't overflow the cup
-    max_dispense_s = 30
+    max_dispense_s = 120
 
     # Without the scale, how long the water runs, in seconds
     sim_dispense_s = 1
